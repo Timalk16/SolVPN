@@ -1,0 +1,66 @@
+import os
+import logging
+from dotenv import load_dotenv
+# Load environment variables from .env file
+load_dotenv()
+
+# Initialize logger
+logger = logging.getLogger(__name__)
+
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError("TELEGRAM_BOT_TOKEN not found in environment variables or .env file")
+
+# Outline Server API URL
+OUTLINE_API_URL = os.getenv("OUTLINE_API_URL")
+if not OUTLINE_API_URL:
+    raise ValueError("OUTLINE_API_URL not found in environment variables or .env file")
+# Optional: Certificate for Outline API if using self-signed certs (leave empty if not)
+
+OUTLINE_CERT_SHA256 = os.getenv("OUTLINE_CERT_SHA256", "") # Default to empty string if not set
+
+# Database file
+DB_PATH = "vpn_subscriptions.db"
+
+# Subscription Plans (duration in days, price in USDT)
+# You can expand this with country options later if you have multiple Outline servers
+PLANS = {
+    "1_month": {"name": "1 Month", "duration_days": 30, "price_usdt": 2.0},
+    "3_months": {"name": "3 Months", "duration_days": 90, "price_usdt": 5.0},
+    "1_year": {"name": "1 Year", "duration_days": 365, "price_usdt": 15.0},
+}
+
+# Payment Gateway Details
+YOOKASSA_SHOP_ID = os.getenv("YOOKASSA_SHOP_ID", "YOUR_YOOKASSA_SHOP_ID")
+YOOKASSA_SECRET_KEY = os.getenv("YOOKASSA_SECRET_KEY", "YOUR_YOOKASSA_SECRET_KEY")
+
+# CryptoBot API Configuration
+CRYPTOBOT_TESTNET_API_TOKEN = os.getenv("CRYPTOBOT_TESTNET_API_TOKEN")
+CRYPTOBOT_MAINNET_API_TOKEN = os.getenv("CRYPTOBOT_MAINNET_API_TOKEN")
+if not CRYPTOBOT_TESTNET_API_TOKEN:
+    raise ValueError("CRYPTOBOT_TESTNET_API_TOKEN not found in environment variables or .env file")
+
+# Debug log the token (first few characters for security)
+masked_token = CRYPTOBOT_TESTNET_API_TOKEN[:8] + "..." + CRYPTOBOT_TESTNET_API_TOKEN[-4:]
+logger.info(f"Loaded CryptoBot testnet token: {masked_token}")
+
+# Use testnet for development
+USE_TESTNET = True
+CRYPTOBOT_API_TOKEN = CRYPTOBOT_TESTNET_API_TOKEN if USE_TESTNET else CRYPTOBOT_MAINNET_API_TOKEN
+
+# Admin User ID
+admin_user_id_str = os.getenv("ADMIN_USER_ID")
+if admin_user_id_str and admin_user_id_str.isdigit():
+    ADMIN_USER_ID = int(admin_user_id_str)
+else:
+    # Fallback or raise error if ADMIN_USER_ID is critical and not found
+    # For now, let's set a placeholder if not found, but in production, you might want to raise an error.
+    print("Warning: ADMIN_USER_ID not found or invalid in .env file. Admin features might not work correctly.")
+    ADMIN_USER_ID = None # Or some default, or raise ValueError
+
+# Rate Limiting (seconds)
+# How many seconds a user must wait between triggering sensitive commands/actions
+RATE_LIMIT_SECONDS = 5  # e.g., user can't use /subscribe more than once every 5 seconds
+COMMAND_RATE_LIMIT = {"default": 3, "subscribe": 10} # seconds per command, default and specific
+CALLBACK_RATE_LIMIT = 2 # seconds between callback queries from the same user
+MESSAGE_RATE_LIMIT = 1 # seconds between general messages (less critical but can be useful)
