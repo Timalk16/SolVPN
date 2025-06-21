@@ -3,7 +3,7 @@ from telegram.ext import ContextTypes
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from database import get_expired_soon_or_active_subscriptions, mark_subscription_expired, get_subscription_by_id
 from outline_utils import get_outline_client, delete_outline_key, rename_outline_key
-from config import PLANS, DB_PATH
+from config import DURATION_PLANS, DB_PATH
 
 async def check_expired_subscriptions(context: ContextTypes.DEFAULT_TYPE):
     """
@@ -31,8 +31,8 @@ async def check_expired_subscriptions(context: ContextTypes.DEFAULT_TYPE):
                     print(f"Scheduler: Could not find subscription {sub_id} for renewal message")
                     continue
                 
-                plan_id = subscription[2]  # plan_id is the 3rd column
-                plan = PLANS.get(plan_id, {})
+                duration_plan_id = subscription[2]  # duration_plan_id is the 3rd column
+                plan = DURATION_PLANS.get(duration_plan_id, {})
                 plan_name = plan.get('name', 'Unknown Plan')
                 
                 try:
@@ -99,7 +99,7 @@ async def delete_expired_keys(context: ContextTypes.DEFAULT_TYPE):
     
     # Check if subscription was renewed
     subscription = get_subscription_by_id(sub_id)
-    if subscription and subscription[4] == 'active':  # status is the 5th column
+    if subscription and subscription[5] == 'active':  # status is the 6th column
         print(f"Scheduler: Subscription {sub_id} was renewed, skipping key deletion")
         return
     

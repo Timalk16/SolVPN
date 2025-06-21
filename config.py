@@ -39,49 +39,41 @@ if os.getenv("OUTLINE_API_URL") and not OUTLINE_SERVERS["germany"]["api_url"]:
 # Database file
 DB_PATH = "vpn_subscriptions.db"
 
-# Subscription Plans with country packages
-PLANS = {
+# Duration Plans (separate from country selection)
+DURATION_PLANS = {
     "test_5min": {
         "name": "Test (5 min)", 
         "duration_days": 0.00347, 
-        "price_usdt": 0.1,
-        "countries": ["germany"]  # Test plan only includes Germany
+        "price_usdt": 0.1
     },
-    "1_month_5_countries": {
-        "name": "1 Month (5 Countries)", 
+    "1_month": {
+        "name": "1 Month", 
         "duration_days": 30, 
-        "price_usdt": 2.0,
-        "countries": ["germany", "france"]  # Will be extended as more countries are added
+        "price_usdt": 2.0
     },
-    "3_months_5_countries": {
-        "name": "3 Months (5 Countries)", 
+    "3_months": {
+        "name": "3 Months", 
         "duration_days": 90, 
-        "price_usdt": 5.0,
-        "countries": ["germany", "france"]
+        "price_usdt": 5.0
     },
-    "1_year_5_countries": {
-        "name": "1 Year (5 Countries)", 
+    "1_year": {
+        "name": "1 Year", 
         "duration_days": 365, 
-        "price_usdt": 15.0,
-        "countries": ["germany", "france"]
+        "price_usdt": 15.0
+    }
+}
+
+# Country Packages (selected after payment)
+COUNTRY_PACKAGES = {
+    "5_countries": {
+        "name": "5 Countries Package",
+        "countries": ["germany", "france"],  # Will be extended as more countries are added
+        "description": "Access to 5 different countries"
     },
-    "1_month_10_countries": {
-        "name": "1 Month (10 Countries)", 
-        "duration_days": 30, 
-        "price_usdt": 3.5,
-        "countries": ["germany", "france"]  # Will be extended to 10 countries
-    },
-    "3_months_10_countries": {
-        "name": "3 Months (10 Countries)", 
-        "duration_days": 90, 
-        "price_usdt": 8.5,
-        "countries": ["germany", "france"]
-    },
-    "1_year_10_countries": {
-        "name": "1 Year (10 Countries)", 
-        "duration_days": 365, 
-        "price_usdt": 25.0,
-        "countries": ["germany", "france"]
+    "10_countries": {
+        "name": "10 Countries Package", 
+        "countries": ["germany", "france"],  # Will be extended to 10 countries
+        "description": "Access to 10 different countries"
     }
 }
 

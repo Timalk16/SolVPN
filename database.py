@@ -19,7 +19,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
-            plan_id TEXT,
+            duration_plan_id TEXT,
+            country_package_id TEXT,
             start_date TIMESTAMP,
             end_date TIMESTAMP,
             status TEXT DEFAULT 'pending_payment', -- pending_payment, active, expired, cancelled
@@ -53,18 +54,30 @@ def add_user_if_not_exists(user_id, username, first_name):
         conn.commit()
     conn.close()
 
-def create_subscription_record(user_id, plan_id, duration_days):
+def create_subscription_record(user_id, duration_plan_id, duration_days):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     # Create a pending record, activation happens after payment
     cursor.execute('''
-        INSERT INTO subscriptions (user_id, plan_id, status)
+        INSERT INTO subscriptions (user_id, duration_plan_id, status)
         VALUES (?, ?, 'pending_payment')
-    ''', (user_id, plan_id))
+    ''', (user_id, duration_plan_id))
     subscription_db_id = cursor.lastrowid
     conn.commit()
     conn.close()
     return subscription_db_id
+
+def update_subscription_country_package(subscription_id, country_package_id):
+    """Update subscription with the selected country package."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE subscriptions
+        SET country_package_id = ?
+        WHERE id = ?
+    ''', (country_package_id, subscription_id))
+    conn.commit()
+    conn.close()
 
 def add_subscription_country(subscription_id, country_code, outline_key_id, outline_access_url):
     """Add a country to a subscription with its VPN key."""
@@ -95,7 +108,7 @@ def get_active_subscriptions(user_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT s.id, s.plan_id, s.end_date, s.status,
+        SELECT s.id, s.duration_plan_id, s.country_package_id, s.end_date, s.status,
                GROUP_CONCAT(sc.country_code) as countries,
                GROUP_CONCAT(sc.outline_access_url) as access_urls
         FROM subscriptions s
@@ -156,7 +169,7 @@ def get_all_active_subscriptions_for_admin():
     # Fetches active or pending ones, or recently expired ones for cleanup.
     # You might want to filter by status more specifically.
     cursor.execute('''
-        SELECT s.id, s.user_id, u.username, u.first_name, s.plan_id, s.end_date, s.status,
+        SELECT s.id, s.user_id, u.username, u.first_name, s.duration_plan_id, s.country_package_id, s.end_date, s.status,
                GROUP_CONCAT(sc.country_code) as countries
         FROM subscriptions s
         JOIN users u ON s.user_id = u.user_id
@@ -174,7 +187,7 @@ def get_subscription_by_id(subscription_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT id, user_id, plan_id, start_date, status, payment_id
+        SELECT id, user_id, duration_plan_id, country_package_id, start_date, status, payment_id
         FROM subscriptions
         WHERE id = ?
     ''', (subscription_id,))

@@ -20,13 +20,13 @@ from telegram.error import BadRequest
 import telegram 
 
 from config import ( 
-    TELEGRAM_BOT_TOKEN, PLANS, ADMIN_USER_ID, OUTLINE_SERVERS,
+    TELEGRAM_BOT_TOKEN, DURATION_PLANS, COUNTRY_PACKAGES, ADMIN_USER_ID, OUTLINE_SERVERS,
     COMMAND_RATE_LIMIT, CALLBACK_RATE_LIMIT, MESSAGE_RATE_LIMIT, DB_PATH # Added DB_PATH
 )
 from database import (
     init_db, add_user_if_not_exists, create_subscription_record,
     activate_subscription, get_active_subscriptions, add_subscription_country,
-    get_subscription_countries,
+    get_subscription_countries, update_subscription_country_package,
     # New DB functions for admin:
     get_all_active_subscriptions_for_admin, get_subscription_by_id, cancel_subscription_by_admin,
     get_subscription_for_admin, mark_subscription_expired
@@ -49,9 +49,10 @@ logger = logging.getLogger(__name__)
 
 # Conversation states for user subscription
 class UserConversationState(Enum):
-    CHOOSE_PLAN = auto()
+    CHOOSE_DURATION = auto()
     CHOOSE_PAYMENT = auto()
     AWAIT_PAYMENT_CONFIRMATION = auto()
+    CHOOSE_COUNTRIES = auto()
 
 # Conversation states for admin deletion (ensure these are distinct from user states)
 class AdminConversationState(Enum):
@@ -61,29 +62,36 @@ class AdminConversationState(Enum):
 ADMIN_PAGE_SIZE = 10  # Number of subscriptions per admin page
 
 # --- Helper Functions ---
-def get_plan_details_text(plan_id: str) -> str:
-    """Return a formatted string with plan details for a given plan_id."""
-    plan = PLANS[plan_id]
-    countries_text = ", ".join([f"{OUTLINE_SERVERS[country]['flag']} {OUTLINE_SERVERS[country]['name']}" 
-                               for country in plan.get('countries', [])])
-    return f"{plan['name']} - {plan['price_usdt']:.2f} USDT ({countries_text})"
+def get_duration_plan_details_text(plan_id: str) -> str:
+    """Return a formatted string with duration plan details for a given plan_id."""
+    plan = DURATION_PLANS[plan_id]
+    return f"{plan['name']} - {plan['price_usdt']:.2f} USDT"
 
-def build_plan_selection_keyboard() -> InlineKeyboardMarkup:
-    """Build the inline keyboard for plan selection."""
+def build_duration_selection_keyboard() -> InlineKeyboardMarkup:
+    """Build the inline keyboard for duration selection."""
     keyboard = [
-        [InlineKeyboardButton(get_plan_details_text(plan_id_key), callback_data=f"plan_{plan_id_key}")]
-        for plan_id_key in PLANS.keys()
+        [InlineKeyboardButton(get_duration_plan_details_text(plan_id_key), callback_data=f"duration_{plan_id_key}")]
+        for plan_id_key in DURATION_PLANS.keys()
     ]
     keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_subscription_flow")])
     return InlineKeyboardMarkup(keyboard)
 
-def build_payment_method_keyboard(plan_id: str) -> InlineKeyboardMarkup:
-    """Build the inline keyboard for payment method selection for a given plan."""
-    plan_details = PLANS[plan_id]
+def build_payment_method_keyboard(duration_plan_id: str) -> InlineKeyboardMarkup:
+    """Build the inline keyboard for payment method selection for a given duration plan."""
+    plan_details = DURATION_PLANS[duration_plan_id]
     keyboard = [
         [InlineKeyboardButton(f"💰 Pay {plan_details['price_usdt']:.2f} USDT (Crypto)", callback_data="pay_crypto")],
-        [InlineKeyboardButton("⬅️ Back to Plans", callback_data="back_to_plans")],
+        [InlineKeyboardButton("⬅️ Back to Duration", callback_data="back_to_duration")],
     ]
+    return InlineKeyboardMarkup(keyboard)
+
+def build_country_selection_keyboard() -> InlineKeyboardMarkup:
+    """Build the inline keyboard for country package selection."""
+    keyboard = [
+        [InlineKeyboardButton(f"{package['name']} - {package['description']}", callback_data=f"countries_{package_id}")]
+        for package_id, package in COUNTRY_PACKAGES.items()
+    ]
+    keyboard.append([InlineKeyboardButton("❌ Cancel", callback_data="cancel_subscription_flow")])
     return InlineKeyboardMarkup(keyboard)
 
 # --- Rate Limiting Helper ---
@@ -220,9 +228,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user
     logger.info(f"User {user.id} initiated /subscribe.")
-    reply_markup = build_plan_selection_keyboard()
-    await update.message.reply_text("Please choose a subscription plan:", reply_markup=reply_markup)
-    return UserConversationState.CHOOSE_PLAN.value
+    reply_markup = build_duration_selection_keyboard()
+    await update.message.reply_text("Please choose a subscription duration:", reply_markup=reply_markup)
+    return UserConversationState.CHOOSE_DURATION.value
 
 @rate_limit_command("my_subscriptions")
 async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -236,17 +244,18 @@ async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT
     message = "Your active VPN subscriptions:\n\n"
     keyboard = []
     
-    for sub_id, plan_id, end_date_str, status, countries, access_urls in active_subs:
-        plan_name = PLANS.get(plan_id, {}).get("name", "Unknown Plan")
+    for sub_id, duration_plan_id, country_package_id, end_date_str, status, countries, access_urls in active_subs:
+        duration_plan_name = DURATION_PLANS.get(duration_plan_id, {}).get("name", "Unknown Duration")
+        country_package_name = COUNTRY_PACKAGES.get(country_package_id, {}).get("name", "Unknown Package")
         end_date = datetime.fromisoformat(end_date_str).strftime('%Y-%m-%d %H:%M UTC')
         
         # Parse countries and access URLs
         country_list = countries.split(',') if countries else []
         access_url_list = access_urls.split(',') if access_urls else []
         
-        message += f"**Plan:** {plan_name}\n"
-        message += f"**Expires on:** {end_date}\n"
-        message += f"**Countries:** {', '.join(country_list)}\n\n"
+        message += f"**Duration:** {duration_plan_name}\n"
+        message += f"**Package:** {country_package_name}\n"
+        message += f"**Expires on:** {end_date}\n\n"
         
         # Add VPN keys for each country
         for i, country in enumerate(country_list):
@@ -258,7 +267,7 @@ async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT
         message += "\n"
         
         # Add renew button for each subscription
-        keyboard.append([InlineKeyboardButton(f"🔄 Renew {plan_name}", callback_data=f"renew_{sub_id}")])
+        keyboard.append([InlineKeyboardButton(f"🔄 Renew {duration_plan_name}", callback_data=f"renew_{sub_id}")])
     
     message += "You can copy the access keys and import them into your Outline client."
     await update.message.reply_text(
@@ -268,19 +277,19 @@ async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT
     )
 
 # --- User Subscription Conversation Handlers ---
-async def plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def duration_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    plan_id = query.data[len("plan_"):]
-    context.user_data['selected_plan'] = plan_id
+    duration_id = query.data[len("duration_"):]
+    context.user_data['selected_duration'] = duration_id
 
-    plan_details = PLANS[plan_id]
+    plan_details = DURATION_PLANS[duration_id]
     text = (
         f"You've selected: {plan_details['name']}\n"
         f"Price: {plan_details['price_usdt']:.2f} USDT.\n\n"
         "Please choose your payment method:"
     )
-    reply_markup = build_payment_method_keyboard(plan_id)
+    reply_markup = build_payment_method_keyboard(duration_id)
     await query.edit_message_text(text=text, reply_markup=reply_markup)
     return UserConversationState.CHOOSE_PAYMENT.value
 
@@ -289,19 +298,19 @@ async def payment_method_chosen(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     
-    if query.data == "back_to_plans":
+    if query.data == "back_to_duration":
         await query.edit_message_text(
-            "Please select a subscription plan:",
-            reply_markup=build_plan_selection_keyboard()
+            "Please select a subscription duration:",
+            reply_markup=build_duration_selection_keyboard()
         )
-        return UserConversationState.CHOOSE_PLAN.value
+        return UserConversationState.CHOOSE_DURATION.value
     
-    plan_id = context.user_data.get('selected_plan')
-    if not plan_id:
-        await query.edit_message_text("Error: No plan selected. Please start over with /subscribe")
+    duration_id = context.user_data.get('selected_duration')
+    if not duration_id:
+        await query.edit_message_text("Error: No duration selected. Please start over with /subscribe")
         return ConversationHandler.END
     
-    plan = PLANS[plan_id]
+    plan = DURATION_PLANS[duration_id]
     
     if query.data == "pay_crypto":
         try:
@@ -330,10 +339,10 @@ async def payment_method_chosen(update: Update, context: ContextTypes.DEFAULT_TY
             await query.edit_message_text(
                 "Sorry, there was an error creating the payment. Please try again later.",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("⬅️ Back to Plans", callback_data="back_to_plans")
+                    InlineKeyboardButton("⬅️ Back to Duration", callback_data="back_to_duration")
                 ]])
             )
-            return UserConversationState.CHOOSE_PLAN.value
+            return UserConversationState.CHOOSE_DURATION.value
     
     return UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value
 
@@ -371,11 +380,8 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             if is_verified:
                 # Create subscription
                 user_id = update.effective_user.id
-                plan_id = context.user_data.get('selected_plan')
-                plan = PLANS[plan_id]
-                
-                # Calculate subscription end date
-                end_date = datetime.now() + timedelta(days=plan['duration_days'])
+                duration_id = context.user_data.get('selected_duration')
+                plan = DURATION_PLANS[duration_id]
                 
                 # Check if this is a renewal
                 renewing_sub_id = context.user_data.get('renewing_sub_id')
@@ -384,6 +390,7 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     # This is a renewal - update existing subscription
                     conn = sqlite3.connect(DB_PATH)
                     cursor = conn.cursor()
+                    end_date = datetime.now() + timedelta(days=plan['duration_days'])
                     cursor.execute('''
                         UPDATE subscriptions
                         SET start_date = ?, end_date = ?, status = 'active', payment_id = ?
@@ -399,80 +406,36 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         f"New Expiry: {end_date.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                         f"Use /my_subscriptions to check your subscription status."
                     )
+                    
+                    await query.edit_message_text(
+                        success_message,
+                        reply_markup=InlineKeyboardMarkup([[
+                            InlineKeyboardButton("⬅️ Back to Menu", callback_data="back_to_menu")
+                        ]])
+                    )
+                    return ConversationHandler.END
                 else:
-                    # This is a new subscription
+                    # This is a new subscription - create pending subscription
                     subscription_id = create_subscription_record(
                         user_id=user_id,
-                        plan_id=plan_id,
+                        duration_plan_id=duration_id,
                         duration_days=plan['duration_days']
                     )
                     
-                    # Create Outline keys for each country in the plan
-                    countries = plan.get('countries', [])
-                    created_keys = []
+                    # Store subscription ID for country selection
+                    context.user_data['pending_subscription_id'] = subscription_id
+                    context.user_data['payment_id'] = payment_id
                     
-                    for country in countries:
-                        try:
-                            # Get Outline client for this country
-                            outline_client = get_outline_client(country)
-                            if not outline_client:
-                                logger.error(f"Failed to get Outline client for country: {country}")
-                                continue
-                            
-                            # Create VPN key for this country
-                            outline_key_id, outline_access_url = create_outline_key(outline_client)
-                            
-                            if outline_key_id and outline_access_url:
-                                # Add country to subscription
-                                add_subscription_country(
-                                    subscription_id=subscription_id,
-                                    country_code=country,
-                                    outline_key_id=outline_key_id,
-                                    outline_access_url=outline_access_url
-                                )
-                                created_keys.append(country)
-                                
-                                # Rename the key for better identification
-                                user_name = update.effective_user.first_name or update.effective_user.username or f"user_{user_id}"
-                                key_name = f"{user_name}_{country}_{subscription_id}"
-                                rename_outline_key(outline_client, outline_key_id, key_name)
-                                
-                                logger.info(f"Created VPN key for {country}: {outline_key_id}")
-                            else:
-                                logger.error(f"Failed to create Outline key for country: {country}")
-                                
-                        except Exception as e:
-                            logger.error(f"Error creating VPN key for {country}: {e}")
-                    
-                    if not created_keys:
-                        raise Exception("Failed to create any VPN keys")
-                    
-                    # Activate the subscription
-                    activate_subscription(
-                        subscription_db_id=subscription_id,
-                        duration_days=plan['duration_days'],
-                        payment_id=payment_id
+                    # Move to country selection
+                    text = (
+                        f"✅ Payment successful!\n\n"
+                        f"Duration: {plan['name']}\n"
+                        f"Price: {plan['price_usdt']:.2f} USDT\n\n"
+                        f"Now choose your country package:"
                     )
-                    
-                    countries_text = ", ".join([f"{OUTLINE_SERVERS[country]['flag']} {OUTLINE_SERVERS[country]['name']}" 
-                                              for country in created_keys])
-                    
-                    success_message = (
-                        f"✅ Payment successful! Your subscription has been activated.\n\n"
-                        f"Plan: {plan['name']}\n"
-                        f"Duration: {plan['duration_days']} days\n"
-                        f"Countries: {countries_text}\n"
-                        f"Expires: {end_date.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                        f"Use /my_subscriptions to get your VPN access keys."
-                    )
-                
-                await query.edit_message_text(
-                    success_message,
-                    reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("⬅️ Back to Menu", callback_data="back_to_menu")
-                    ]])
-                )
-                return ConversationHandler.END
+                    reply_markup = build_country_selection_keyboard()
+                    await query.edit_message_text(text=text, reply_markup=reply_markup)
+                    return UserConversationState.CHOOSE_COUNTRIES.value
             else:
                 await query.edit_message_text(
                     "❌ Payment verification failed. Please try again or contact support.",
@@ -502,24 +465,131 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value
 
-async def back_to_plans_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def countries_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle country package selection and activate subscription."""
     query = update.callback_query
     await query.answer()
-    reply_markup = build_plan_selection_keyboard()
-    await query.edit_message_text("Please choose a subscription plan:", reply_markup=reply_markup)
-    return UserConversationState.CHOOSE_PLAN.value
+    
+    country_package_id = query.data[len("countries_"):]
+    subscription_id = context.user_data.get('pending_subscription_id')
+    payment_id = context.user_data.get('payment_id')
+    duration_id = context.user_data.get('selected_duration')
+    
+    if not subscription_id or not payment_id or not duration_id:
+        await query.edit_message_text(
+            "❌ Error: Missing subscription information. Please start over with /subscribe",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Back to Menu", callback_data="back_to_menu")
+            ]])
+        )
+        return ConversationHandler.END
+    
+    try:
+        # Get package details
+        package = COUNTRY_PACKAGES[country_package_id]
+        duration_plan = DURATION_PLANS[duration_id]
+        
+        # Update subscription with country package
+        update_subscription_country_package(subscription_id, country_package_id)
+        
+        # Create Outline keys for each country in the package
+        countries = package.get('countries', [])
+        created_keys = []
+        
+        for country in countries:
+            try:
+                # Get Outline client for this country
+                outline_client = get_outline_client(country)
+                if not outline_client:
+                    logger.error(f"Failed to get Outline client for country: {country}")
+                    continue
+                
+                # Create VPN key for this country
+                outline_key_id, outline_access_url = create_outline_key(outline_client)
+                
+                if outline_key_id and outline_access_url:
+                    # Add country to subscription
+                    add_subscription_country(
+                        subscription_id=subscription_id,
+                        country_code=country,
+                        outline_key_id=outline_key_id,
+                        outline_access_url=outline_access_url
+                    )
+                    created_keys.append(country)
+                    
+                    # Rename the key for better identification
+                    user_name = update.effective_user.first_name or update.effective_user.username or f"user_{update.effective_user.id}"
+                    key_name = f"{user_name}_{country}_{subscription_id}"
+                    rename_outline_key(outline_client, outline_key_id, key_name)
+                    
+                    logger.info(f"Created VPN key for {country}: {outline_key_id}")
+                else:
+                    logger.error(f"Failed to create Outline key for country: {country}")
+                    
+            except Exception as e:
+                logger.error(f"Error creating VPN key for {country}: {e}")
+        
+        if not created_keys:
+            raise Exception("Failed to create any VPN keys")
+        
+        # Activate the subscription
+        activate_subscription(
+            subscription_db_id=subscription_id,
+            duration_days=duration_plan['duration_days'],
+            payment_id=payment_id
+        )
+        
+        countries_text = ", ".join([f"{OUTLINE_SERVERS[country]['flag']} {OUTLINE_SERVERS[country]['name']}" 
+                                  for country in created_keys])
+        
+        success_message = (
+            f"🎉 Your VPN subscription is now active!\n\n"
+            f"Duration: {duration_plan['name']}\n"
+            f"Package: {package['name']}\n"
+            f"Countries: {countries_text}\n"
+            f"Expires: {(datetime.now() + timedelta(days=duration_plan['duration_days'])).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+            f"Use /my_subscriptions to get your VPN access keys."
+        )
+        
+        await query.edit_message_text(
+            success_message,
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Back to Menu", callback_data="back_to_menu")
+            ]])
+        )
+        
+        # Clear user data
+        context.user_data.clear()
+        return ConversationHandler.END
+        
+    except Exception as e:
+        logger.error(f"Error activating subscription: {e}")
+        await query.edit_message_text(
+            "❌ An error occurred while activating your subscription. Please contact support.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Back to Menu", callback_data="back_to_menu")
+            ]])
+        )
+        return ConversationHandler.END
+
+async def back_to_duration_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    reply_markup = build_duration_selection_keyboard()
+    await query.edit_message_text("Please choose a subscription duration:", reply_markup=reply_markup)
+    return UserConversationState.CHOOSE_DURATION.value
 
 async def back_to_payment_choice_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    plan_id = context.user_data['selected_plan']
-    plan_details = PLANS[plan_id]
+    duration_id = context.user_data['selected_duration']
+    plan_details = DURATION_PLANS[duration_id]
     text = (
         f"You've selected: {plan_details['name']}\n"
         f"Price: {plan_details['price_usdt']:.2f} USDT.\n\n"
         "Please choose your payment method:"
     )
-    reply_markup = build_payment_method_keyboard(plan_id)
+    reply_markup = build_payment_method_keyboard(duration_id)
     await query.edit_message_text(text=text, reply_markup=reply_markup)
     return UserConversationState.CHOOSE_PAYMENT.value
 
@@ -558,7 +628,7 @@ async def admin_delete_subscription_start(update: Update, context: ContextTypes.
 
     for sub_id, user_id, username, first_name, plan_id, end_date_str, _, status in subs_to_display:
         user_display = username or first_name or f"User {user_id}"
-        plan_name = PLANS.get(plan_id, {}).get("name", "Unknown")
+        plan_name = DURATION_PLANS.get(plan_id, {}).get("name", "Unknown")
         end_date_short = end_date_str[:10] if end_date_str else "N/A"
         
         btn_text = f"ID:{sub_id} U:{user_display[:10]} P:{plan_name[:7]} S:{status[:6]}"
@@ -840,17 +910,21 @@ def main() -> None:
             CallbackQueryHandler(handle_renewal, pattern=r"^renew_\d+$")
         ],
         states={
-            UserConversationState.CHOOSE_PLAN.value: [
-                CallbackQueryHandler(plan_chosen, pattern=r"^plan_"),
+            UserConversationState.CHOOSE_DURATION.value: [
+                CallbackQueryHandler(duration_chosen, pattern=r"^duration_"),
                 CallbackQueryHandler(cancel_subscription_flow, pattern="^cancel_subscription_flow$")
             ],
             UserConversationState.CHOOSE_PAYMENT.value: [
                 CallbackQueryHandler(payment_method_chosen, pattern=r"^pay_"),
-                CallbackQueryHandler(back_to_plans_handler, pattern="^back_to_plans$"),
+                CallbackQueryHandler(back_to_duration_handler, pattern="^back_to_duration$"),
                 CallbackQueryHandler(cancel_subscription_flow, pattern="^cancel_subscription_flow$") # User cancel
             ],
             UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value: [
                 CallbackQueryHandler(confirm_payment, pattern="^confirm_payment$"),
+                CallbackQueryHandler(cancel_subscription_flow, pattern="^cancel_subscription_flow$")
+            ],
+            UserConversationState.CHOOSE_COUNTRIES.value: [
+                CallbackQueryHandler(countries_chosen, pattern=r"^countries_"),
                 CallbackQueryHandler(cancel_subscription_flow, pattern="^cancel_subscription_flow$")
             ]
         },
@@ -926,11 +1000,11 @@ async def handle_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return ConversationHandler.END
     
     plan_id = result[0]
-    plan = PLANS[plan_id]
+    plan = DURATION_PLANS[plan_id]
     
     # Store the subscription ID for later use
     context.user_data['renewing_sub_id'] = sub_id
-    context.user_data['selected_plan'] = plan_id
+    context.user_data['selected_duration'] = plan_id
     
     text = (
         f"You're renewing: {plan['name']}\n"
