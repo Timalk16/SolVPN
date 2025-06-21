@@ -5,6 +5,8 @@ from functools import wraps # For admin_only decorator
 from enum import Enum, auto
 import uuid
 from datetime import datetime, timedelta
+import sqlite3
+import asyncio
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
@@ -18,17 +20,19 @@ from telegram.error import BadRequest
 import telegram 
 
 from config import ( 
-    TELEGRAM_BOT_TOKEN, PLANS, ADMIN_USER_ID,
-    COMMAND_RATE_LIMIT, CALLBACK_RATE_LIMIT, MESSAGE_RATE_LIMIT # Import new settings
+    TELEGRAM_BOT_TOKEN, PLANS, ADMIN_USER_ID, OUTLINE_SERVERS,
+    COMMAND_RATE_LIMIT, CALLBACK_RATE_LIMIT, MESSAGE_RATE_LIMIT, DB_PATH # Added DB_PATH
 )
 from database import (
     init_db, add_user_if_not_exists, create_subscription_record,
-    activate_subscription, get_active_subscriptions,
+    activate_subscription, get_active_subscriptions, add_subscription_country,
+    get_subscription_countries,
     # New DB functions for admin:
-    get_all_active_subscriptions_for_admin, get_subscription_by_id, cancel_subscription_by_admin
+    get_all_active_subscriptions_for_admin, get_subscription_by_id, cancel_subscription_by_admin,
+    get_subscription_for_admin, mark_subscription_expired
 )
 from outline_utils import (
-    get_outline_client, create_outline_key, rename_outline_key, delete_outline_key # Ensure delete_outline_key
+    get_outline_client, create_outline_key, rename_outline_key, delete_outline_key, get_available_countries
 )
 from payment_utils import (
     generate_yookassa_payment_link, get_crypto_payment_details,
@@ -60,7 +64,9 @@ ADMIN_PAGE_SIZE = 10  # Number of subscriptions per admin page
 def get_plan_details_text(plan_id: str) -> str:
     """Return a formatted string with plan details for a given plan_id."""
     plan = PLANS[plan_id]
-    return f"{plan['name']} - {plan['price_usdt']:.2f} USDT"
+    countries_text = ", ".join([f"{OUTLINE_SERVERS[country]['flag']} {OUTLINE_SERVERS[country]['name']}" 
+                               for country in plan.get('countries', [])])
+    return f"{plan['name']} - {plan['price_usdt']:.2f} USDT ({countries_text})"
 
 def build_plan_selection_keyboard() -> InlineKeyboardMarkup:
     """Build the inline keyboard for plan selection."""
@@ -228,16 +234,38 @@ async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT
         return
 
     message = "Your active VPN subscriptions:\n\n"
-    for sub_id, plan_id, end_date_str, access_url, status in active_subs:
+    keyboard = []
+    
+    for sub_id, plan_id, end_date_str, status, countries, access_urls in active_subs:
         plan_name = PLANS.get(plan_id, {}).get("name", "Unknown Plan")
         end_date = datetime.fromisoformat(end_date_str).strftime('%Y-%m-%d %H:%M UTC')
-        message += (
-            f"Plan: {plan_name}\n"
-            f"Expires on: {end_date}\n"
-            f"Access Key: `{access_url}`\n\n"
-        )
-    message += "You can copy the access key and import it into your Outline client."
-    await update.message.reply_text(message, parse_mode=ParseMode.MARKDOWN)
+        
+        # Parse countries and access URLs
+        country_list = countries.split(',') if countries else []
+        access_url_list = access_urls.split(',') if access_urls else []
+        
+        message += f"**Plan:** {plan_name}\n"
+        message += f"**Expires on:** {end_date}\n"
+        message += f"**Countries:** {', '.join(country_list)}\n\n"
+        
+        # Add VPN keys for each country
+        for i, country in enumerate(country_list):
+            if i < len(access_url_list):
+                country_name = OUTLINE_SERVERS.get(country, {}).get('name', country.title())
+                country_flag = OUTLINE_SERVERS.get(country, {}).get('flag', '🌍')
+                message += f"{country_flag} **{country_name}:** `{access_url_list[i]}`\n"
+        
+        message += "\n"
+        
+        # Add renew button for each subscription
+        keyboard.append([InlineKeyboardButton(f"🔄 Renew {plan_name}", callback_data=f"renew_{sub_id}")])
+    
+    message += "You can copy the access keys and import them into your Outline client."
+    await update.message.reply_text(
+        message, 
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 # --- User Subscription Conversation Handlers ---
 async def plan_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -314,26 +342,17 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     await query.answer()
     
-    if query.data == "cancel_subscription_flow":
-        await query.edit_message_text(
-            "Subscription process cancelled. Use /subscribe to start again.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("⬅️ Back to Plans", callback_data="back_to_plans")
-            ]])
-        )
-        return UserConversationState.CHOOSE_PLAN.value
-    
     payment_id = context.user_data.get('payment_id')
     payment_type = context.user_data.get('payment_type')
     
     if not payment_id or not payment_type:
         await query.edit_message_text(
-            "Error: Payment information not found. Please start over with /subscribe",
+            "❌ Error: Payment information not found. Please start over with /subscribe",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("⬅️ Back to Plans", callback_data="back_to_plans")
+                InlineKeyboardButton("⬅️ Back to Menu", callback_data="back_to_menu")
             ]])
         )
-        return UserConversationState.CHOOSE_PLAN.value
+        return ConversationHandler.END
     
     try:
         # First check payment status
@@ -358,36 +377,97 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 # Calculate subscription end date
                 end_date = datetime.now() + timedelta(days=plan['duration_days'])
                 
-                # Create subscription in database
-                subscription_id = create_subscription_record(
-                    user_id=user_id,
-                    plan_id=plan_id,
-                    duration_days=plan['duration_days']
-                )
+                # Check if this is a renewal
+                renewing_sub_id = context.user_data.get('renewing_sub_id')
                 
-                # Create Outline key and activate subscription
-                outline_client = get_outline_client()
-                outline_key_id, outline_access_url = create_outline_key(outline_client)
+                if renewing_sub_id:
+                    # This is a renewal - update existing subscription
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute('''
+                        UPDATE subscriptions
+                        SET start_date = ?, end_date = ?, status = 'active', payment_id = ?
+                        WHERE id = ? AND user_id = ?
+                    ''', (datetime.now(), end_date, payment_id, renewing_sub_id, user_id))
+                    conn.commit()
+                    conn.close()
+                    
+                    success_message = (
+                        f"✅ Payment successful! Your subscription has been renewed.\n\n"
+                        f"Plan: {plan['name']}\n"
+                        f"Duration: {plan['duration_days']} days\n"
+                        f"New Expiry: {end_date.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                        f"Use /my_subscriptions to check your subscription status."
+                    )
+                else:
+                    # This is a new subscription
+                    subscription_id = create_subscription_record(
+                        user_id=user_id,
+                        plan_id=plan_id,
+                        duration_days=plan['duration_days']
+                    )
+                    
+                    # Create Outline keys for each country in the plan
+                    countries = plan.get('countries', [])
+                    created_keys = []
+                    
+                    for country in countries:
+                        try:
+                            # Get Outline client for this country
+                            outline_client = get_outline_client(country)
+                            if not outline_client:
+                                logger.error(f"Failed to get Outline client for country: {country}")
+                                continue
+                            
+                            # Create VPN key for this country
+                            outline_key_id, outline_access_url = create_outline_key(outline_client)
+                            
+                            if outline_key_id and outline_access_url:
+                                # Add country to subscription
+                                add_subscription_country(
+                                    subscription_id=subscription_id,
+                                    country_code=country,
+                                    outline_key_id=outline_key_id,
+                                    outline_access_url=outline_access_url
+                                )
+                                created_keys.append(country)
+                                
+                                # Rename the key for better identification
+                                user_name = update.effective_user.first_name or update.effective_user.username or f"user_{user_id}"
+                                key_name = f"{user_name}_{country}_{subscription_id}"
+                                rename_outline_key(outline_client, outline_key_id, key_name)
+                                
+                                logger.info(f"Created VPN key for {country}: {outline_key_id}")
+                            else:
+                                logger.error(f"Failed to create Outline key for country: {country}")
+                                
+                        except Exception as e:
+                            logger.error(f"Error creating VPN key for {country}: {e}")
+                    
+                    if not created_keys:
+                        raise Exception("Failed to create any VPN keys")
+                    
+                    # Activate the subscription
+                    activate_subscription(
+                        subscription_db_id=subscription_id,
+                        duration_days=plan['duration_days'],
+                        payment_id=payment_id
+                    )
+                    
+                    countries_text = ", ".join([f"{OUTLINE_SERVERS[country]['flag']} {OUTLINE_SERVERS[country]['name']}" 
+                                              for country in created_keys])
+                    
+                    success_message = (
+                        f"✅ Payment successful! Your subscription has been activated.\n\n"
+                        f"Plan: {plan['name']}\n"
+                        f"Duration: {plan['duration_days']} days\n"
+                        f"Countries: {countries_text}\n"
+                        f"Expires: {end_date.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                        f"Use /my_subscriptions to get your VPN access keys."
+                    )
                 
-                if not outline_key_id or not outline_access_url:
-                    raise Exception("Failed to create Outline key")
-                
-                # Activate the subscription with the Outline key
-                activate_subscription(
-                    subscription_db_id=subscription_id,
-                    outline_key_id=outline_key_id,
-                    outline_access_url=outline_access_url,
-                    duration_days=plan['duration_days'],
-                    payment_id=payment_id
-                )
-                
-                # Send success message
                 await query.edit_message_text(
-                    f"✅ Payment successful! Your subscription has been activated.\n\n"
-                    f"Plan: {plan['name']}\n"
-                    f"Duration: {plan['duration_days']} days\n"
-                    f"Expires: {end_date.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                    f"Use /my_subscriptions to check your subscription status.",
+                    success_message,
                     reply_markup=InlineKeyboardMarkup([[
                         InlineKeyboardButton("⬅️ Back to Menu", callback_data="back_to_menu")
                     ]])
@@ -411,31 +491,12 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 ]])
             )
             return UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value
-        elif status == "error":
-            await query.edit_message_text(
-                "❌ Error checking payment status. Please try again in a few moments.",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🔄 Check Again", callback_data="confirm_payment"),
-                    InlineKeyboardButton("❌ Cancel", callback_data="cancel_subscription_flow")
-                ]])
-            )
-            return UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value
-        else:
-            await query.edit_message_text(
-                f"❌ Payment status: {status}. Please make sure you've sent the payment and try again.",
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🔄 Check Again", callback_data="confirm_payment"),
-                    InlineKeyboardButton("❌ Cancel", callback_data="cancel_subscription_flow")
-                ]])
-            )
-            return UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value
-            
     except Exception as e:
-        logger.error(f"Error in confirm_payment: {e}")
+        logger.error(f"Error processing payment: {e}")
         await query.edit_message_text(
-            "❌ An error occurred while verifying your payment. Please try again or contact support.",
+            "❌ An error occurred while processing your payment. Please try again or contact support.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔄 Check Again", callback_data="confirm_payment"),
+                InlineKeyboardButton("🔄 Try Again", callback_data="confirm_payment"),
                 InlineKeyboardButton("❌ Cancel", callback_data="cancel_subscription_flow")
             ]])
         )
@@ -541,43 +602,25 @@ async def admin_paginate_subs(update: Update, context: ContextTypes.DEFAULT_TYPE
     return await admin_delete_subscription_start(update, context)
 
 async def admin_sub_chosen_for_deletion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle admin selection of subscription for deletion."""
     query = update.callback_query
-    sub_db_id_to_delete = None
-
+    message = update.message
+    
     if query:
         await query.answer()
-        if query.data.startswith("admin_del_page_"):
-            return await admin_paginate_subs(update, context)
-        if query.data.startswith("admin_del_"):
-            try:
-                sub_db_id_to_delete = int(query.data.split("_")[-1])
-            except ValueError:
-                logger.error(f"Invalid callback data for admin_del: {query.data}")
-                await query.edit_message_text("Invalid selection. Please try again or /cancel.") # No parse_mode
-                return AdminConversationState.ADMIN_LIST_SUBS.value
-        elif query.data == "admin_cancel_delete": # Added direct handling for cancel from this state
-            return await admin_cancel_delete_flow(update, context)
-        else: # Should not happen
-            await query.edit_message_text("Invalid action. Please try again or /cancel.") # No parse_mode
-            return AdminConversationState.ADMIN_LIST_SUBS.value
+        sub_db_id_to_delete = int(query.data.split('_')[2])  # admin_del_123 -> 123
+    elif message:
         try:
-            await query.edit_message_reply_markup(reply_markup=None)
-        except telegram.error.BadRequest as e:
-            logger.warning(f"Could not remove keyboard in admin_sub_chosen: {e}")
-    elif update.message and update.message.text:
-        try:
-            sub_db_id_to_delete = int(update.message.text.strip())
+            sub_db_id_to_delete = int(message.text.strip())
         except ValueError:
-            await update.message.reply_text("Invalid ID format. Please enter a numeric Subscription DB ID or use /cancel.") # No parse_mode
+            await message.reply_text("Please enter a valid subscription ID (number).") # No parse_mode
             return AdminConversationState.ADMIN_LIST_SUBS.value
-
-    if not sub_db_id_to_delete:
-        err_msg = "No subscription ID provided. Please try again or use /cancel." # No parse_mode
-        target_message_obj = query.message if query else update.message
-        await target_message_obj.reply_text(err_msg) # No parse_mode
+    else:
         return AdminConversationState.ADMIN_LIST_SUBS.value
 
-    subscription = get_subscription_by_id(sub_db_id_to_delete)
+    # Get subscription details using the admin-specific function
+    subscription = get_subscription_for_admin(sub_db_id_to_delete)
+    
     if not subscription:
         msg = f"Subscription with DB ID {sub_db_id_to_delete} not found." # No parse_mode
         target_message_obj = query.message if query else update.message
@@ -665,21 +708,100 @@ async def admin_confirm_delete_action(update: Update, context: ContextTypes.DEFA
     return ConversationHandler.END
 
 async def admin_cancel_delete_flow(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle admin cancellation of delete flow."""
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(
+            "❌ Subscription deletion cancelled.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Back to Admin", callback_data="admin_menu")
+            ]])
+        )
+    else:
+        await update.message.reply_text("❌ Subscription deletion cancelled.")
+    return ConversationHandler.END
+
+async def admin_delete_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle admin deletion of subscription."""
     query = update.callback_query
-    message_to_send = "Subscription deletion process cancelled." # No parse_mode
-    if query:
-        await query.answer()
-        try:
-            await query.edit_message_text(message_to_send) # No parse_mode
-        except telegram.error.BadRequest:
-            if update.effective_message:
-                 await update.effective_message.reply_text(message_to_send) # No parse_mode
-    elif update.message:
-        await update.message.reply_text(message_to_send) # No parse_mode
+    await query.answer()
     
-    context.user_data.pop('sub_to_delete_id', None)
-    context.user_data.pop('sub_to_delete_details', None)
-    context.user_data.pop('admin_delete_page', None)
+    sub_id = int(query.data.split('_')[2])  # admin_del_123 -> 123
+    
+    # Get subscription details
+    subscription = get_subscription_for_admin(sub_id)
+    if not subscription:
+        await query.edit_message_text(
+            "❌ Error: Subscription not found.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Back to Admin", callback_data="admin_menu")
+            ]])
+        )
+        return ConversationHandler.END
+    
+    user_id = subscription[1]
+    key_ids = subscription[3].split(',') if subscription[3] else []
+    countries = subscription[4].split(',') if subscription[4] else []
+    
+    # Delete Outline keys for each country
+    deleted_keys = []
+    failed_keys = []
+    
+    for i, country in enumerate(countries):
+        if i < len(key_ids) and key_ids[i]:
+            try:
+                outline_client = get_outline_client(country)
+                if outline_client:
+                    deleted = delete_outline_key(outline_client, key_ids[i])
+                    if deleted:
+                        deleted_keys.append(f"{country} ({key_ids[i]})")
+                    else:
+                        failed_keys.append(f"{country} ({key_ids[i]})")
+                else:
+                    failed_keys.append(f"{country} (no client)")
+            except Exception as e:
+                logger.error(f"Error deleting key {key_ids[i]} for {country}: {e}")
+                failed_keys.append(f"{country} (error)")
+    
+    # Cancel the subscription in database
+    db_updated = cancel_subscription_by_admin(sub_id)
+    
+    # Prepare result message
+    if deleted_keys and db_updated:
+        result_message = f"✅ Subscription {sub_id} cancelled. Deleted keys: {', '.join(deleted_keys)}"
+        if failed_keys:
+            result_message += f"\n⚠️ Failed to delete: {', '.join(failed_keys)}"
+    elif db_updated:
+        result_message = f"⚠️ Subscription {sub_id} cancelled in DB. Failed to delete keys: {', '.join(failed_keys)}"
+    else:
+        result_message = f"❌ Failed to cancel subscription {sub_id}"
+    
+    await query.edit_message_text(
+        result_message,
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⬅️ Back to Admin", callback_data="admin_menu")
+        ]])
+    )
+    
+    return ConversationHandler.END
+
+async def back_to_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle the back to menu button press."""
+    query = update.callback_query
+    await query.answer()
+    
+    # Clear any conversation data
+    context.user_data.clear()
+    
+    # Send the main menu message
+    await query.edit_message_text(
+        "Welcome to the VPN Bot! 🚀\n\n"
+        "Available commands:\n"
+        "/subscribe - Subscribe to VPN service\n"
+        "/my_subscriptions - Check your active subscriptions\n"
+        "/help - Get help and support\n"
+        "/start - Show this menu"
+    )
     return ConversationHandler.END
 
 # --- Fallback and Error Handlers ---
@@ -689,7 +811,7 @@ async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def send_error_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: str) -> None:
     """Utility to send an error message to a user, logs on failure."""
     try:
-        context.bot.send_message(chat_id=chat_id, text=text)
+        asyncio.create_task(context.bot.send_message(chat_id=chat_id, text=text))
     except Exception as e:
         logger.error(f"Error sending error message to user: {e}")
 
@@ -711,36 +833,36 @@ def main() -> None:
     job_queue.run_repeating(check_expired_subscriptions, interval=60, first=10, name="expiry_check_short_interval")
     logger.info("Scheduled job for checking expired subscriptions.")
 
+    # Add conversation handler for user subscription flow
     user_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("subscribe", subscribe_command)],
+        entry_points=[
+            CommandHandler("subscribe", subscribe_command),
+            CallbackQueryHandler(handle_renewal, pattern=r"^renew_\d+$")
+        ],
         states={
             UserConversationState.CHOOSE_PLAN.value: [
-                CallbackQueryHandler(plan_chosen, pattern="^plan_"),
+                CallbackQueryHandler(plan_chosen, pattern=r"^plan_"),
                 CallbackQueryHandler(cancel_subscription_flow, pattern="^cancel_subscription_flow$")
             ],
             UserConversationState.CHOOSE_PAYMENT.value: [
-                CallbackQueryHandler(payment_method_chosen, pattern="^pay_"),
+                CallbackQueryHandler(payment_method_chosen, pattern=r"^pay_"),
                 CallbackQueryHandler(back_to_plans_handler, pattern="^back_to_plans$"),
                 CallbackQueryHandler(cancel_subscription_flow, pattern="^cancel_subscription_flow$") # User cancel
             ],
             UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value: [
                 CallbackQueryHandler(confirm_payment, pattern="^confirm_payment$"),
-                CallbackQueryHandler(back_to_payment_choice_handler, pattern="^back_to_payment_choice$"),
-                CallbackQueryHandler(cancel_subscription_flow, pattern="^cancel_subscription_flow$") # User cancel
-            ],
+                CallbackQueryHandler(cancel_subscription_flow, pattern="^cancel_subscription_flow$")
+            ]
         },
-        fallbacks=[
-            CommandHandler("cancel", cancel_subscription_flow), # User flow cancel command
-            CallbackQueryHandler(cancel_subscription_flow, pattern="^cancel_subscription_flow$") # User flow cancel button
-        ],
-        per_message=False
+        fallbacks=[CommandHandler("cancel", cancel_subscription_flow)]
     )
 
     admin_del_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("admin_del_sub", admin_delete_subscription_start)],
         states={
             AdminConversationState.ADMIN_LIST_SUBS.value: [
-                CallbackQueryHandler(admin_sub_chosen_for_deletion, pattern="^admin_del_"),
+                CallbackQueryHandler(admin_paginate_subs, pattern="^admin_del_page_"),
+                CallbackQueryHandler(admin_sub_chosen_for_deletion, pattern="^admin_del_\d+$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_sub_chosen_for_deletion),
                 CallbackQueryHandler(admin_cancel_delete_flow, pattern="^admin_cancel_delete$") # Admin cancel button
             ],
@@ -766,21 +888,120 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("my_subscriptions", my_subscriptions_command))
     
-    # If you want a global /cancel that can end any active conversation from these handlers:
-    # async def global_cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    #     await update.message.reply_text("Operation cancelled.")
-    #     context.user_data.clear() # Clear any specific data
-    #     return ConversationHandler.END # This will end ANY active conversation
-    # application.add_handler(CommandHandler("cancel", global_cancel_command))
-    # Note: The above global cancel needs to be carefully placed or might interfere
-    # with ConversationHandler's own fallbacks if they also use /cancel.
-    # For now, specific cancels in each handler's fallbacks are safer.
-
+    # Add handlers for buttons outside conversation flow
+    application.add_handler(CallbackQueryHandler(back_to_menu_handler, pattern="^back_to_menu$"))
+    application.add_handler(CallbackQueryHandler(handle_cancel_expired, pattern=r"^cancel_expired_\d+$"))
+    
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
     application.add_error_handler(error_handler)
 
     logger.info("Starting bot polling...")
     application.run_polling()
+
+async def handle_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle subscription renewal request."""
+    query = update.callback_query
+    await query.answer()
+    
+    sub_id = int(query.data.split('_')[1])
+    user_id = update.effective_user.id
+    
+    # Get subscription details
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT plan_id FROM subscriptions
+        WHERE id = ? AND user_id = ?
+    ''', (sub_id, user_id))
+    result = cursor.fetchone()
+    conn.close()
+    
+    if not result:
+        await query.edit_message_text(
+            "❌ Error: Subscription not found or you don't have permission to renew it.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Back to Menu", callback_data="back_to_menu")
+            ]])
+        )
+        return ConversationHandler.END
+    
+    plan_id = result[0]
+    plan = PLANS[plan_id]
+    
+    # Store the subscription ID for later use
+    context.user_data['renewing_sub_id'] = sub_id
+    context.user_data['selected_plan'] = plan_id
+    
+    text = (
+        f"You're renewing: {plan['name']}\n"
+        f"Price: {plan['price_usdt']:.2f} USDT.\n\n"
+        "Please choose your payment method:"
+    )
+    reply_markup = build_payment_method_keyboard(plan_id)
+    await query.edit_message_text(text=text, reply_markup=reply_markup)
+    return UserConversationState.CHOOSE_PAYMENT.value
+
+async def handle_cancel_expired(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle cancellation of expired subscription."""
+    query = update.callback_query
+    await query.answer()
+    
+    sub_id = int(query.data.split('_')[2])  # cancel_expired_123 -> 123
+    user_id = update.effective_user.id
+    
+    # Get subscription details
+    subscription = get_subscription_for_admin(sub_id)
+    if not subscription or subscription[1] != user_id:  # user_id is the 2nd column
+        await query.edit_message_text(
+            "❌ Error: Subscription not found or you don't have permission to cancel it.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Back to Menu", callback_data="back_to_menu")
+            ]])
+        )
+        return ConversationHandler.END
+    
+    # Get key IDs and countries
+    key_ids = subscription[3].split(',') if subscription[3] else []
+    countries = subscription[4].split(',') if subscription[4] else []
+    
+    # Delete Outline keys for each country
+    deleted_count = 0
+    total_keys = len(key_ids)
+    
+    for i, country in enumerate(countries):
+        if i < len(key_ids) and key_ids[i]:
+            try:
+                outline_client = get_outline_client(country)
+                if outline_client:
+                    deleted = delete_outline_key(outline_client, key_ids[i])
+                    if deleted:
+                        deleted_count += 1
+                    else:
+                        print(f"Failed to delete key {key_ids[i]} for {country}")
+                else:
+                    print(f"Could not connect to Outline server for {country}")
+            except Exception as e:
+                print(f"Error deleting key {key_ids[i]} for {country}: {e}")
+    
+    # Mark subscription as expired
+    mark_subscription_expired(sub_id)
+    
+    # Send result message
+    if deleted_count == total_keys:
+        message = "✅ Your VPN access keys have been deactivated.\nTo get a new subscription, use /subscribe"
+    elif deleted_count > 0:
+        message = f"⚠️ {deleted_count}/{total_keys} VPN access keys have been deactivated.\nTo get a new subscription, use /subscribe"
+    else:
+        message = "❌ Error: Failed to deactivate your VPN access keys. Please try again or contact support."
+    
+    await query.edit_message_text(
+        message,
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("⬅️ Back to Menu", callback_data="back_to_menu")
+        ]])
+    )
+    
+    return ConversationHandler.END
 
 if __name__ == "__main__":
     main()

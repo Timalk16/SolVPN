@@ -11,23 +11,78 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 if not TELEGRAM_BOT_TOKEN:
     raise ValueError("TELEGRAM_BOT_TOKEN not found in environment variables or .env file")
 
-# Outline Server API URL
-OUTLINE_API_URL = os.getenv("OUTLINE_API_URL")
-if not OUTLINE_API_URL:
-    raise ValueError("OUTLINE_API_URL not found in environment variables or .env file")
-# Optional: Certificate for Outline API if using self-signed certs (leave empty if not)
+# Outline Server API URLs for different countries
+OUTLINE_SERVERS = {
+    "germany": {
+        "api_url": os.getenv("OUTLINE_API_URL_GERMANY"),
+        "cert_sha256": os.getenv("OUTLINE_CERT_SHA256_GERMANY", ""),
+        "name": "Germany",
+        "flag": "🇩🇪"
+    },
+    "france": {
+        "api_url": os.getenv("OUTLINE_API_URL_FRANCE"),
+        "cert_sha256": os.getenv("OUTLINE_CERT_SHA256_FRANCE", ""),
+        "name": "France",
+        "flag": "🇫🇷"
+    }
+}
 
-OUTLINE_CERT_SHA256 = os.getenv("OUTLINE_CERT_SHA256", "") # Default to empty string if not set
+# Validate that at least one server is configured
+if not any(server["api_url"] for server in OUTLINE_SERVERS.values()):
+    raise ValueError("No Outline server API URLs found in environment variables")
+
+# Legacy support - if old single server config exists, use it for Germany
+if os.getenv("OUTLINE_API_URL") and not OUTLINE_SERVERS["germany"]["api_url"]:
+    OUTLINE_SERVERS["germany"]["api_url"] = os.getenv("OUTLINE_API_URL")
+    OUTLINE_SERVERS["germany"]["cert_sha256"] = os.getenv("OUTLINE_CERT_SHA256", "")
 
 # Database file
 DB_PATH = "vpn_subscriptions.db"
 
-# Subscription Plans (duration in days, price in USDT)
-# You can expand this with country options later if you have multiple Outline servers
+# Subscription Plans with country packages
 PLANS = {
-    "1_month": {"name": "1 Month", "duration_days": 30, "price_usdt": 2.0},
-    "3_months": {"name": "3 Months", "duration_days": 90, "price_usdt": 5.0},
-    "1_year": {"name": "1 Year", "duration_days": 365, "price_usdt": 15.0},
+    "test_5min": {
+        "name": "Test (5 min)", 
+        "duration_days": 0.00347, 
+        "price_usdt": 0.1,
+        "countries": ["germany"]  # Test plan only includes Germany
+    },
+    "1_month_5_countries": {
+        "name": "1 Month (5 Countries)", 
+        "duration_days": 30, 
+        "price_usdt": 2.0,
+        "countries": ["germany", "france"]  # Will be extended as more countries are added
+    },
+    "3_months_5_countries": {
+        "name": "3 Months (5 Countries)", 
+        "duration_days": 90, 
+        "price_usdt": 5.0,
+        "countries": ["germany", "france"]
+    },
+    "1_year_5_countries": {
+        "name": "1 Year (5 Countries)", 
+        "duration_days": 365, 
+        "price_usdt": 15.0,
+        "countries": ["germany", "france"]
+    },
+    "1_month_10_countries": {
+        "name": "1 Month (10 Countries)", 
+        "duration_days": 30, 
+        "price_usdt": 3.5,
+        "countries": ["germany", "france"]  # Will be extended to 10 countries
+    },
+    "3_months_10_countries": {
+        "name": "3 Months (10 Countries)", 
+        "duration_days": 90, 
+        "price_usdt": 8.5,
+        "countries": ["germany", "france"]
+    },
+    "1_year_10_countries": {
+        "name": "1 Year (10 Countries)", 
+        "duration_days": 365, 
+        "price_usdt": 25.0,
+        "countries": ["germany", "france"]
+    }
 }
 
 # Payment Gateway Details

@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@foile/crypto-pay-api": "^1.0.4"
+  }
+}

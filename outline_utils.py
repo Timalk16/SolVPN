@@ -1,21 +1,27 @@
 from outline_vpn.outline_vpn import OutlineVPN
-from config import OUTLINE_API_URL, OUTLINE_CERT_SHA256
+from config import OUTLINE_SERVERS
 import uuid
 
-def get_outline_client():
-    """Initializes and returns an OutlineVPN client."""
-    if not OUTLINE_API_URL or "YOUR_OUTLINE_API_URL" in OUTLINE_API_URL:
-        raise ValueError("OUTLINE_API_URL is not configured properly in config.py")
+def get_outline_client(country_code):
+    """Initializes and returns an OutlineVPN client for a specific country."""
+    if country_code not in OUTLINE_SERVERS:
+        raise ValueError(f"Country {country_code} not found in OUTLINE_SERVERS configuration")
     
-    client_params = {"api_url": OUTLINE_API_URL}
-    if OUTLINE_CERT_SHA256:
-        client_params["cert_sha256"] = OUTLINE_CERT_SHA256
+    server_config = OUTLINE_SERVERS[country_code]
+    api_url = server_config["api_url"]
+    
+    if not api_url or "YOUR_OUTLINE_API_URL" in api_url:
+        raise ValueError(f"OUTLINE_API_URL for {country_code} is not configured properly in config.py")
+    
+    client_params = {"api_url": api_url}
+    if server_config["cert_sha256"]:
+        client_params["cert_sha256"] = server_config["cert_sha256"]
     
     try:
         client = OutlineVPN(**client_params)
         return client
     except Exception as e:
-        print(f"Error initializing Outline client: {e}")
+        print(f"Error initializing Outline client for {country_code}: {e}")
         return None
 
 def create_outline_key(client, key_name_prefix="user"):
@@ -65,13 +71,28 @@ def rename_outline_key(client, key_id, new_name):
         print(f"Error renaming Outline key {key_id}: {e}")
         return False
 
+def get_available_countries():
+    """Returns a list of available country codes that have configured servers."""
+    return [country for country, config in OUTLINE_SERVERS.items() if config["api_url"]]
+
 if __name__ == '__main__':
     # Test functions (ensure your OUTLINE_API_URL is set in config.py)
-    client = get_outline_client()
-    if client:
-        print("Successfully connected to Outline server.")
-        print(f"Server name: {client.get_server_information().get('name', 'N/A')}")
-        print(f"Number of keys: {len(client.get_keys())}")
+    available_countries = get_available_countries()
+    print(f"Available countries: {available_countries}")
+    
+    for country in available_countries:
+        print(f"\nTesting connection to {country} server...")
+        client = get_outline_client(country)
+        if client:
+            print(f"Successfully connected to {country} Outline server.")
+            try:
+                server_info = client.get_server_information()
+                print(f"Server name: {server_info.get('name', 'N/A')}")
+                print(f"Number of keys: {len(client.get_keys())}")
+            except Exception as e:
+                print(f"Error getting server info for {country}: {e}")
+        else:
+            print(f"Failed to connect to {country} Outline server. Check config.py and server status.")
 
         # Example: Create and delete a test key
         # print("Creating test key...")
@@ -87,9 +108,3 @@ if __name__ == '__main__':
         #         print(f"Failed to delete key {key_id}.")
         # else:
         #     print("Failed to create test key.")
-    else:
-        print("Failed to connect to Outline server. Check config.py and server status.")
-
-
-
-        # maybe we could return a little bit more bcs whet i run outline_utils.py i got this error
