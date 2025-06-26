@@ -39,17 +39,17 @@ async def check_expired_subscriptions(context: ContextTypes.DEFAULT_TYPE):
                     # Send expiration message with renewal options
                     keyboard = [
                         [
-                            InlineKeyboardButton("🔄 Renew Now", callback_data=f"renew_{sub_id}"),
-                            InlineKeyboardButton("❌ Cancel", callback_data=f"cancel_expired_{sub_id}")
+                            InlineKeyboardButton("🔄 Продлить сейчас", callback_data=f"renew_{sub_id}"),
+                            InlineKeyboardButton("❌ Отмена", callback_data=f"cancel_expired_{sub_id}")
                         ]
                     ]
                     
                     await bot.send_message(
                         chat_id=user_id,
                         text=(
-                            f"😔 Your VPN subscription ({plan_name}) has expired.\n\n"
-                            "You have 5 minutes to renew your subscription before your access keys are deactivated.\n\n"
-                            "To continue using the VPN, please choose an option below:"
+                            f"😔 Ваша подписка на VPN ({plan_name}) истекла.\n\n"
+                            "У вас есть 5 минут, чтобы продлить подписку, прежде чем ваши ключи доступа будут деактивированы.\n\n"
+                            "Чтобы продолжить использование VPN, пожалуйста, выберите один из следующих вариантов:"
                         ),
                         reply_markup=InlineKeyboardMarkup(keyboard)
                     )
@@ -76,9 +76,9 @@ async def check_expired_subscriptions(context: ContextTypes.DEFAULT_TYPE):
                         await bot.send_message(
                             chat_id=user_id,
                             text=(
-                                f"🔔 Your VPN subscription is expiring on {end_date.strftime('%Y-%m-%d %H:%M UTC')}.\n"
-                                "Don't miss out! Renew now to maintain uninterrupted access.\n"
-                                "Use /my_subscriptions to renew your subscription."
+                                f"🔔 Ваша подписка на VPN истекает {end_date.strftime('%Y-%m-%d %H:%M UTC')}.\n"
+                                "Не пропустите! Продлите сейчас, чтобы сохранить непрерывный доступ.\n"
+                                "Используйте /my_subscriptions для продления подписки."
                             )
                         )
                         print(f"Scheduler: Sent renewal reminder to user {user_id} for sub {sub_id}")
@@ -129,11 +129,11 @@ async def delete_expired_keys(context: ContextTypes.DEFAULT_TYPE):
     # Send final message to user
     try:
         if deleted_count == total_keys:
-            message = "❌ Your VPN access keys have been deactivated as the subscription was not renewed.\nTo get a new subscription, use /subscribe"
+            message = "❌ Ваши ключи доступа к VPN были деактивированы, так как подписка не была продлена.\nЧтобы получить новую подписку, используйте /subscribe"
         elif deleted_count > 0:
-            message = f"❌ {deleted_count}/{total_keys} VPN access keys have been deactivated as the subscription was not renewed.\nTo get a new subscription, use /subscribe"
+            message = f"❌ {deleted_count}/{total_keys} ключей доступа к VPN были деактивированы, так как подписка не была продлена.\nЧтобы получить новую подписку, используйте /subscribe"
         else:
-            message = "❌ Your VPN subscription has expired. To get a new subscription, use /subscribe"
+            message = "❌ Ваша подписка на VPN истекла. Чтобы получить новую подписку, используйте /subscribe"
         
         await context.bot.send_message(chat_id=user_id, text=message)
     except Exception as e:

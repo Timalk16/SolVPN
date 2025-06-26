@@ -187,7 +187,7 @@ def get_subscription_by_id(subscription_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
-        SELECT id, user_id, duration_plan_id, country_package_id, start_date, status, payment_id
+        SELECT id, user_id, duration_plan_id, country_package_id, start_date, end_date, status, payment_id
         FROM subscriptions
         WHERE id = ?
     ''', (subscription_id,))

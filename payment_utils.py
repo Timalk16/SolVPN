@@ -4,7 +4,7 @@ import logging
 import aiohttp
 import json
 from typing import Tuple, Optional
-from config import CRYPTOBOT_TESTNET_API_TOKEN, CRYPTOBOT_MAINNET_API_TOKEN, PLANS, USE_TESTNET, TELEGRAM_BOT_TOKEN
+from config import CRYPTOBOT_TESTNET_API_TOKEN, CRYPTOBOT_MAINNET_API_TOKEN, DURATION_PLANS, USE_TESTNET, TELEGRAM_BOT_TOKEN
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ async def get_crypto_payment_details(amount_usdt: float, plan_name: str) -> Tupl
         data = {
             "asset": asset,
             "amount": str(amount_usdt),
-            "description": f"VPN Subscription - {plan_name}",
+            "description": f"Подписка на VPN - {plan_name}",
             "paid_btn_name": "callback",
             "paid_btn_url": f"https://t.me/{get_bot_username()}?start=payment_success",
             "allow_comments": False,
@@ -64,18 +64,18 @@ async def get_crypto_payment_details(amount_usdt: float, plan_name: str) -> Tupl
                         
                         # Add testnet warning if in testnet mode
                         testnet_warning = (
-                            "⚠️ *TESTNET MODE*\n"
-                            "You are using the testnet. This is for testing purposes only.\n"
-                            "No real funds will be used.\n\n"
+                            "⚠️ *ТЕСТОВЫЙ РЕЖИМ*\n"
+                            "Вы используете тестовую сеть. Это только для тестирования.\n"
+                            "Реальные средства использоваться не будут.\n\n"
                         ) if USE_TESTNET else ""
                         
                         instructions = (
                             f"{testnet_warning}"
-                            f"Please pay {amount_usdt} {asset} for your {plan_name} subscription.\n\n"
-                            f"1. Click the payment link below:\n"
-                            f"2. Follow the instructions in the CryptoBot interface\n"
-                            f"3. After successful payment, click 'I have paid' button below\n\n"
-                            f"Payment Link: {pay_url}"
+                            f"Пожалуйста, оплатите {amount_usdt} {asset} за вашу подписку '{plan_name}'.\n\n"
+                            f"1. Нажмите на ссылку для оплаты ниже:\n"
+                            f"2. Следуйте инструкциям в интерфейсе CryptoBot\n"
+                            f"3. После успешной оплаты нажмите кнопку 'Я оплатил' ниже\n\n"
+                            f"Ссылка для оплаты: {pay_url}"
                         )
                         
                         logger.info(f"Created crypto payment invoice: {invoice_id}")
@@ -230,8 +230,8 @@ def get_testnet_status() -> str:
     """Returns a warning message if in testnet mode."""
     if USE_TESTNET:
         return (
-            "⚠️ *TESTNET MODE*\n"
-            "You are using the testnet. This is for testing purposes only.\n"
-            "No real funds will be used."
+            "⚠️ *ТЕСТОВЫЙ РЕЖИМ*\n"
+            "Вы используете тестовую сеть. Это только для тестирования.\n"
+            "Реальные средства использоваться не будут."
         )
     return ""

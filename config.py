@@ -47,33 +47,33 @@ DURATION_PLANS = {
         "price_usdt": 0.1
     },
     "1_month": {
-        "name": "1 Month", 
-        "duration_days": 30, 
-        "price_usdt": 2.0
+        "name": "Подписка на 1 месяц",
+        "duration_days": 30,
+        "price_usdt": 5.00
     },
     "3_months": {
-        "name": "3 Months", 
-        "duration_days": 90, 
-        "price_usdt": 5.0
+        "name": "Подписка на 3 месяца",
+        "duration_days": 90,
+        "price_usdt": 12.00
     },
-    "1_year": {
-        "name": "1 Year", 
-        "duration_days": 365, 
-        "price_usdt": 15.0
+    "12_months": {
+        "name": "Подписка на 12 месяцев",
+        "duration_days": 365,
+        "price_usdt": 40.00
     }
 }
 
 # Country Packages (selected after payment)
 COUNTRY_PACKAGES = {
-    "5_countries": {
-        "name": "5 Countries Package",
-        "countries": ["germany", "france"],  # Will be extended as more countries are added
-        "description": "Access to 5 different countries"
+    "standard": {
+        "name": "Стандартный пакет",
+        "description": "Доступ к серверам в Германии и Франции",
+        "countries": ["germany", "france"]
     },
-    "10_countries": {
-        "name": "10 Countries Package", 
-        "countries": ["germany", "france"],  # Will be extended to 10 countries
-        "description": "Access to 10 different countries"
+    "extended": {
+        "name": "Расширенный пакет",
+        "description": "Доступ ко всем локациям, включая США",
+        "countries": ["germany", "france", "usa"]
     }
 }
 
