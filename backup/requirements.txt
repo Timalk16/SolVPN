@@ -1,8 +1,0 @@
-python-telegram-bot[job-queue]>=20.0  # The job-queue extra is for APScheduler integration
-outline-vpn-api
-APScheduler
-python-dotenv
-crypto-bot-api
-aiocryptopay>=0.1.0
-# For YouKassa (if you proceed with real integration):
-# yookassa
