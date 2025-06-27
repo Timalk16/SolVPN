@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 import sqlite3
 import asyncio
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, BotCommandScopeChat
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, BotCommandScopeChat, InputFile
 from telegram.constants import ParseMode
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, ConversationHandler,
@@ -171,32 +171,42 @@ def admin_only(func):
 # --- Command Handlers (User & Admin) ---
 @rate_limit_command("start")
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a welcome message and list available commands."""
+    """Send a welcome message with logo and Russian menu buttons."""
     user = update.effective_user
     add_user_if_not_exists(user.id, user.username, user.first_name)
     logger.info(f"[start_command] User {user.id} ({user.username or user.first_name}) started the bot.")
+
+    # Send logo image
+    with open("assets/logo.jpeg", "rb") as img:
+        await update.message.reply_photo(photo=InputFile(img))
 
     # Get testnet status
     testnet_status = get_testnet_status()
     testnet_notice = f"\n\n⚠️ *{testnet_status} Mode*" if testnet_status == "Testnet" else ""
 
-    welcome_text = (
+    # Simplified welcome message
+    menu_text = (
         f"👋 Добро пожаловать, {user.first_name}!\n\n"
-        "Я помогу вам получить быструю и безопасную подписку на VPN.\n\n"
-        "Доступные команды:\n"
-        "/subscribe - Выбрать новый план подписки.\n"
-        "/my_subscriptions - Посмотреть ваши активные подписки.\n"
-        "/help - Получить справочную информацию."
+        "Я помогу вам получить быструю и безопасную подписку на VPN."
         f"{testnet_notice}"
     )
     if user.id == ADMIN_USER_ID:
-        welcome_text += (
-            "\n\nAdmin Commands:\n"
-            "/admin_del_sub - Delete a user subscription."
+        menu_text += (
+            "\n\n*Admin Commands:*\n"
+            "/admin_del_sub — Delete a user subscription."
         )
     # Escape special characters for Markdown
-    welcome_text = welcome_text.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
-    await update.message.reply_text(welcome_text, parse_mode=ParseMode.MARKDOWN)
+    menu_text = menu_text.replace('_', '\\_').replace('*', '\\*').replace('[', '\\[').replace('`', '\\`')
+
+    # Russian menu buttons
+    keyboard = [
+        [InlineKeyboardButton("🟢 Подписаться", callback_data="menu_subscribe")],
+        [InlineKeyboardButton("📋 Мои подписки", callback_data="menu_my_subscriptions")],
+        [InlineKeyboardButton("❓ Помощь", callback_data="menu_help")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(menu_text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
 @rate_limit_command("help")
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -895,6 +905,73 @@ async def back_to_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     )
     return ConversationHandler.END
 
+# --- Main Menu Button Handlers ---
+async def menu_subscribe_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    # Simulate /subscribe command for callback context
+    user = query.from_user
+    chat_id = query.message.chat_id
+    reply_markup = build_duration_selection_keyboard()
+    await context.bot.send_message(chat_id=chat_id, text="Пожалуйста, выберите срок подписки:", reply_markup=reply_markup)
+
+async def menu_my_subscriptions_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    # Simulate /my_subscriptions command for callback context
+    user_id = query.from_user.id
+    chat_id = query.message.chat_id
+    active_subs = get_active_subscriptions(user_id)
+    if not active_subs:
+        await context.bot.send_message(chat_id=chat_id, text="У вас нет активных подписок. Используйте /subscribe, чтобы приобрести одну!")
+        return
+    message = "Ваши активные подписки на VPN:\n\n"
+    keyboard = []
+    for sub_id, duration_plan_id, country_package_id, end_date_str, status, countries, access_urls in active_subs:
+        duration_plan_name = DURATION_PLANS.get(duration_plan_id, {}).get("name", "Неизвестный срок")
+        country_package_name = COUNTRY_PACKAGES.get(country_package_id, {}).get("name", "Неизвестный пакет")
+        end_date = datetime.fromisoformat(end_date_str).strftime('%Y-%m-%d %H:%M UTC')
+        country_list = countries.split(',') if countries else []
+        access_url_list = access_urls.split(',') if access_urls else []
+        message += f"**Срок:** {duration_plan_name}\n"
+        message += f"**Пакет:** {country_package_name}\n"
+        message += f"**Истекает:** {end_date}\n\n"
+        for i, country in enumerate(country_list):
+            if i < len(access_url_list):
+                country_name = OUTLINE_SERVERS.get(country, {}).get('name', country.title())
+                country_flag = OUTLINE_SERVERS.get(country, {}).get('flag', '🌍')
+                message += f"{country_flag} **{country_name}:** `{access_url_list[i]}`\n"
+        message += "\n"
+        keyboard.append([InlineKeyboardButton(f"🔄 Продлить {duration_plan_name}", callback_data=f"renew_{sub_id}")])
+    message += "Вы можете скопировать ключи доступа и импортировать их в свой клиент Outline."
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=message,
+        parse_mode=ParseMode.MARKDOWN,
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+
+async def menu_help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    user = query.from_user
+    chat_id = query.message.chat_id
+    testnet_status = get_testnet_status()
+    testnet_notice = f"\n\n⚠️ *{testnet_status} Mode*" if testnet_status == "Testnet" else ""
+    help_text = (
+        "ℹ️ Как пользоваться этим ботом:\n\n"
+        "1. Используйте /subscribe, чтобы увидеть доступные тарифы VPN.\n"
+        "2. Выберите тариф и способ оплаты.\n"
+        "3. Следуйте инструкциям для завершения оплаты.\n"
+        "4. После подтверждения оплаты вы получите ключ доступа к VPN.\n\n"
+        "Используйте /my_subscriptions для проверки вашего текущего доступа.\n"
+        "Если у вас возникли проблемы, обратитесь в поддержку (детали будут добавлены здесь)."
+        f"{testnet_notice}"
+    )
+    if user.id == ADMIN_USER_ID:
+        help_text += ("\n\nAdmin Commands:\n/admin_del_sub - Delete a user subscription.")
+    await context.bot.send_message(chat_id=chat_id, text=help_text, parse_mode=ParseMode.MARKDOWN_V2)
+
 # --- Fallback and Error Handlers ---
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Извините, я не понял эту команду. Попробуйте /help.") # No parse_mode
@@ -1006,6 +1083,10 @@ def main() -> None:
     # Add handlers for buttons outside conversation flow
     application.add_handler(CallbackQueryHandler(back_to_menu_handler, pattern="^back_to_menu$"))
     application.add_handler(CallbackQueryHandler(handle_cancel_expired, pattern=r"^cancel_expired_\d+$"))
+    
+    application.add_handler(CallbackQueryHandler(menu_subscribe_handler, pattern="^menu_subscribe$"))
+    application.add_handler(CallbackQueryHandler(menu_my_subscriptions_handler, pattern="^menu_my_subscriptions$"))
+    application.add_handler(CallbackQueryHandler(menu_help_handler, pattern="^menu_help$"))
     
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
     application.add_error_handler(error_handler)
