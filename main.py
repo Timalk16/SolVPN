@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime, timedelta
 import sqlite3
 import asyncio
+import re
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, BotCommandScopeChat, InputFile
 from telegram.constants import ParseMode
@@ -293,6 +294,8 @@ async def duration_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     duration_id = query.data[len("duration_"):]
     context.user_data['selected_duration'] = duration_id
+    
+    logger.info(f"User {update.effective_user.id} selected duration: {duration_id}")
 
     plan_details = DURATION_PLANS[duration_id]
     text = (
@@ -906,14 +909,18 @@ async def back_to_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 # --- Main Menu Button Handlers ---
-async def menu_subscribe_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def menu_subscribe_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     # Simulate /subscribe command for callback context
     user = query.from_user
     chat_id = query.message.chat_id
+    
+    logger.info(f"User {user.id} started subscription flow from menu button")
+    
     reply_markup = build_duration_selection_keyboard()
     await context.bot.send_message(chat_id=chat_id, text="Пожалуйста, выберите срок подписки:", reply_markup=reply_markup)
+    return UserConversationState.CHOOSE_DURATION.value
 
 async def menu_my_subscriptions_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -960,16 +967,16 @@ async def menu_help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     testnet_notice = f"\n\n⚠️ *{testnet_status} Mode*" if testnet_status == "Testnet" else ""
     help_text = (
         "ℹ️ Как пользоваться этим ботом:\n\n"
-        "1. Используйте /subscribe, чтобы увидеть доступные тарифы VPN.\n"
-        "2. Выберите тариф и способ оплаты.\n"
-        "3. Следуйте инструкциям для завершения оплаты.\n"
-        "4. После подтверждения оплаты вы получите ключ доступа к VPN.\n\n"
-        "Используйте /my_subscriptions для проверки вашего текущего доступа.\n"
-        "Если у вас возникли проблемы, обратитесь в поддержку (детали будут добавлены здесь)."
+        "1\\. Используйте /subscribe, чтобы увидеть доступные тарифы VPN\\.\n"
+        "2\\. Выберите тариф и способ оплаты\\.\n"
+        "3\\. Следуйте инструкциям для завершения оплаты\\.\n"
+        "4\\. После подтверждения оплаты вы получите ключ доступа к VPN\\.\n\n"
+        "Используйте /my\\_subscriptions для проверки вашего текущего доступа\\.\n"
+        "Если у вас возникли проблемы, обратитесь в поддержку \\(детали будут добавлены здесь\\)\\."
         f"{testnet_notice}"
     )
     if user.id == ADMIN_USER_ID:
-        help_text += ("\n\nAdmin Commands:\n/admin_del_sub - Delete a user subscription.")
+        help_text += ("\n\nAdmin Commands:\n/admin\\_del\\_sub \\- Delete a user subscription\\.")
     await context.bot.send_message(chat_id=chat_id, text=help_text, parse_mode=ParseMode.MARKDOWN_V2)
 
 # --- Fallback and Error Handlers ---
@@ -1025,7 +1032,8 @@ def main() -> None:
     user_conv_handler = ConversationHandler(
         entry_points=[
             CommandHandler("subscribe", subscribe_command),
-            CallbackQueryHandler(handle_renewal, pattern=r"^renew_\d+$")
+            CallbackQueryHandler(handle_renewal, pattern=r"^renew_\d+$"),
+            CallbackQueryHandler(menu_subscribe_handler, pattern="^menu_subscribe$")
         ],
         states={
             UserConversationState.CHOOSE_DURATION.value: [
@@ -1084,7 +1092,6 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(back_to_menu_handler, pattern="^back_to_menu$"))
     application.add_handler(CallbackQueryHandler(handle_cancel_expired, pattern=r"^cancel_expired_\d+$"))
     
-    application.add_handler(CallbackQueryHandler(menu_subscribe_handler, pattern="^menu_subscribe$"))
     application.add_handler(CallbackQueryHandler(menu_my_subscriptions_handler, pattern="^menu_my_subscriptions$"))
     application.add_handler(CallbackQueryHandler(menu_help_handler, pattern="^menu_help$"))
     
@@ -1183,6 +1190,16 @@ async def handle_cancel_expired(update: Update, context: ContextTypes.DEFAULT_TY
     )
     
     return ConversationHandler.END
+
+def escape_markdown_v2(text: str) -> str:
+    """Escape special characters for Telegram Markdown V2 format."""
+    # Characters that need to be escaped in Markdown V2
+    escape_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    
+    for char in escape_chars:
+        text = text.replace(char, f'\\{char}')
+    
+    return text
 
 if __name__ == "__main__":
     main()
