@@ -15,7 +15,7 @@ from telegram.ext import (
     Application, CommandHandler, MessageHandler, ConversationHandler,
     CallbackQueryHandler, ContextTypes, filters, JobQueue
 )
-from telegram.error import BadRequest
+from telegram.error import BadRequest, Conflict
 
 # We will need telegram.error for handling potential bad requests if we try to edit too much
 import telegram 
@@ -992,6 +992,17 @@ def send_error_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: s
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Global error handler for uncaught exceptions in handlers."""
+    error = context.error
+    
+    # Handle specific conflict error for multiple bot instances
+    if isinstance(error, Conflict):
+        logger.error("Multiple bot instances detected! Please ensure only one instance is running.")
+        logger.error("This usually happens when:")
+        logger.error("1. Multiple deployments are running simultaneously")
+        logger.error("2. Local development bot is running while production is also running")
+        logger.error("3. Render/Railway is restarting the service multiple times")
+        return
+    
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
     if isinstance(update, Update) and update.effective_chat:
         send_error_message(context, update.effective_chat.id, "Произошла непредвиденная ошибка. Пожалуйста, попробуйте еще раз или обратитесь в поддержку.")
