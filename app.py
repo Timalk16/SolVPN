@@ -25,51 +25,17 @@ bot_status = {
     "last_check": None
 }
 
-def start_bot():
-    """Start the bot in a background thread"""
-    global bot_status
-    try:
-        print("Starting VPN Bot in background...")
-        bot_status["startup_time"] = time.time()
-        bot_status["last_check"] = time.time()
-        
-        # Import and run the bot
-        from main import main
-        import asyncio
-        
-        print("Bot imports successful, starting main function...")
-        
-        # Create new event loop for this thread
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            # Run the bot
-            loop.run_until_complete(main())
-        finally:
-            loop.close()
-        
-        # If we get here, the bot has stopped
-        bot_status["running"] = False
-        bot_status["error"] = "Bot stopped unexpectedly"
-        print("Bot stopped unexpectedly")
-        
-    except Exception as e:
-        print(f"Bot error: {e}")
-        import traceback
-        traceback.print_exc()
-        bot_status["running"] = False
-        bot_status["error"] = str(e)
-        bot_status["last_check"] = time.time()
-
-def check_bot_status():
-    """Check if bot is still running"""
-    global bot_status
-    if bot_status["startup_time"] and time.time() - bot_status["startup_time"] > 10:
-        # Bot has been running for more than 10 seconds, consider it successful
-        if not bot_status["running"] and not bot_status["error"]:
-            bot_status["running"] = True
-            print("Bot appears to be running successfully")
+def start_flask():
+    """Start Flask in a background thread"""
+    port = int(os.environ.get('PORT', 5000))
+    print(f"Starting Flask app on 0.0.0.0:{port}")
+    app.run(
+        host='0.0.0.0',  # Bind to all interfaces
+        port=port,       # Use PORT from environment
+        debug=False,     # Disable debug mode
+        threaded=True,   # Enable threading
+        use_reloader=False  # Disable reloader to avoid duplicate processes
+    )
 
 @app.route('/')
 def home():
@@ -158,31 +124,53 @@ def test_bot():
             "bot_status": bot_status
         }), 500
 
+def check_bot_status():
+    """Check if bot is still running"""
+    global bot_status
+    if bot_status["startup_time"] and time.time() - bot_status["startup_time"] > 10:
+        # Bot has been running for more than 10 seconds, consider it successful
+        if not bot_status["running"] and not bot_status["error"]:
+            bot_status["running"] = True
+            print("Bot appears to be running successfully")
+
 def main():
     """Main function to start the service"""
     # Get port from environment (Render requirement)
     port = int(os.environ.get('PORT', 5000))
     
-    print(f"Starting Flask service on port {port}")
+    print(f"Starting VPN Bot service on port {port}")
     print(f"Environment PORT: {os.environ.get('PORT', 'not set')}")
     
-    # Start bot in background thread
-    try:
-        bot_thread = threading.Thread(target=start_bot, daemon=True)
-        bot_thread.start()
-        print("Bot thread started successfully")
-    except Exception as e:
-        print(f"Failed to start bot thread: {e}")
-        bot_status["error"] = str(e)
+    # Start Flask in a background thread
+    flask_thread = threading.Thread(target=start_flask, daemon=True)
+    flask_thread.start()
+    print("Flask thread started successfully")
     
-    # Start Flask app (this is the critical part for Render)
-    print(f"Starting Flask app on 0.0.0.0:{port}")
-    app.run(
-        host='0.0.0.0',  # Bind to all interfaces
-        port=port,       # Use PORT from environment
-        debug=False,     # Disable debug mode
-        threaded=True    # Enable threading
-    )
+    # Give Flask a moment to start
+    time.sleep(2)
+    
+    # Start the bot in the main thread (this avoids signal handler issues)
+    try:
+        print("Starting VPN Bot in main thread...")
+        bot_status["startup_time"] = time.time()
+        bot_status["last_check"] = time.time()
+        
+        # Import and run the bot
+        from main import main as run_bot
+        import asyncio
+        
+        print("Bot imports successful, starting main function...")
+        
+        # Run the bot in the main thread
+        asyncio.run(run_bot())
+        
+    except Exception as e:
+        print(f"Bot error: {e}")
+        import traceback
+        traceback.print_exc()
+        bot_status["running"] = False
+        bot_status["error"] = str(e)
+        bot_status["last_check"] = time.time()
 
 if __name__ == '__main__':
     main() 
