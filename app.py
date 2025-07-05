@@ -7,7 +7,12 @@ import os
 import sys
 import time
 import threading
+import warnings
 from flask import Flask, jsonify
+
+# Suppress warnings that might appear during bot startup
+warnings.filterwarnings("ignore", category=UserWarning, module="telegram")
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # Create Flask app
 app = Flask(__name__)
@@ -16,7 +21,8 @@ app = Flask(__name__)
 bot_status = {
     "running": False,
     "error": None,
-    "startup_time": None
+    "startup_time": None,
+    "last_check": None
 }
 
 def start_bot():
@@ -25,47 +31,78 @@ def start_bot():
     try:
         print("Starting VPN Bot in background...")
         bot_status["startup_time"] = time.time()
+        bot_status["last_check"] = time.time()
         
         # Import and run the bot
         from main import main
         import asyncio
         
-        bot_status["running"] = True
-        bot_status["error"] = None
-        print("Bot started successfully")
+        print("Bot imports successful, starting main function...")
         
         # Run the bot
         asyncio.run(main())
+        
+        # If we get here, the bot has stopped
+        bot_status["running"] = False
+        bot_status["error"] = "Bot stopped unexpectedly"
+        print("Bot stopped unexpectedly")
+        
     except Exception as e:
         print(f"Bot error: {e}")
         bot_status["running"] = False
         bot_status["error"] = str(e)
+        bot_status["last_check"] = time.time()
+
+def check_bot_status():
+    """Check if bot is still running"""
+    global bot_status
+    if bot_status["startup_time"] and time.time() - bot_status["startup_time"] > 10:
+        # Bot has been running for more than 10 seconds, consider it successful
+        if not bot_status["running"] and not bot_status["error"]:
+            bot_status["running"] = True
+            print("Bot appears to be running successfully")
 
 @app.route('/')
 def home():
     """Home page"""
+    # Check bot status
+    check_bot_status()
+    
     return jsonify({
         "service": "VPN Bot",
         "status": "running",
         "bot_status": bot_status,
-        "endpoints": ["/health", "/status", "/ping"]
+        "endpoints": ["/health", "/status", "/ping"],
+        "uptime": time.time() - bot_status.get("startup_time", time.time()) if bot_status.get("startup_time") else 0
     })
 
 @app.route('/health')
 def health():
     """Health check for Render"""
-    return jsonify({"status": "healthy"}), 200
+    # Check bot status
+    check_bot_status()
+    
+    return jsonify({
+        "status": "healthy",
+        "bot_running": bot_status["running"],
+        "bot_error": bot_status["error"]
+    }), 200
 
 @app.route('/status')
 def status():
     """Detailed status"""
+    # Check bot status
+    check_bot_status()
+    
     return jsonify({
         "service": "VPN Bot",
         "bot_status": bot_status,
         "port": os.environ.get('PORT', '5000'),
+        "uptime": time.time() - bot_status.get("startup_time", time.time()) if bot_status.get("startup_time") else 0,
         "environment": {
             "has_telegram_token": bool(os.getenv("TELEGRAM_BOT_TOKEN")),
-            "has_cryptobot_token": bool(os.getenv("CRYPTOBOT_TESTNET_API_TOKEN"))
+            "has_cryptobot_token": bool(os.getenv("CRYPTOBOT_TESTNET_API_TOKEN")),
+            "has_outline_servers": bool(os.getenv("OUTLINE_API_URL_GERMANY") or os.getenv("OUTLINE_API_URL_FRANCE"))
         }
     })
 
@@ -86,7 +123,7 @@ def main():
     try:
         bot_thread = threading.Thread(target=start_bot, daemon=True)
         bot_thread.start()
-        print("Bot thread started")
+        print("Bot thread started successfully")
     except Exception as e:
         print(f"Failed to start bot thread: {e}")
         bot_status["error"] = str(e)

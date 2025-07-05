@@ -1065,7 +1065,10 @@ def main() -> None:
                 CallbackQueryHandler(cancel_subscription_flow, pattern="^cancel_subscription_flow$")
             ]
         },
-        fallbacks=[CommandHandler("cancel", cancel_subscription_flow)]
+        fallbacks=[CommandHandler("cancel", cancel_subscription_flow)],
+        per_user=True,
+        per_chat=True,
+        per_message=True
     )
 
     admin_del_conv_handler = ConversationHandler(
