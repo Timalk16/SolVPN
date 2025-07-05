@@ -39,8 +39,15 @@ def start_bot():
         
         print("Bot imports successful, starting main function...")
         
-        # Run the bot
-        asyncio.run(main())
+        # Create new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            # Run the bot
+            loop.run_until_complete(main())
+        finally:
+            loop.close()
         
         # If we get here, the bot has stopped
         bot_status["running"] = False

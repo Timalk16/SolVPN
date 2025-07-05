@@ -1028,7 +1028,7 @@ async def post_init(application: Application) -> None:
         logger.error(f"Could not set admin commands for admin {ADMIN_USER_ID}: {e}")
 
 # --- Main Function ---
-def main() -> None:
+async def main() -> None:
     """Entry point for the bot: initializes the database, sets up handlers, and starts polling."""
     init_db()
     logger.info("Database initialized.")
@@ -1113,7 +1113,7 @@ def main() -> None:
     application.add_error_handler(error_handler)
 
     logger.info("Starting bot polling...")
-    application.run_polling()
+    await application.run_polling()
 
 async def handle_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle subscription renewal request."""
@@ -1216,4 +1216,5 @@ def escape_markdown_v2(text: str) -> str:
     return text
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
