@@ -1,107 +1,104 @@
 #!/usr/bin/env python3
 """
-Flask web service wrapper for the VPN Bot
-This allows the bot to run on Render as a web service with health checks
+Simple Flask web service for VPN Bot
+Follows Render's port binding requirements exactly
 """
 import os
-import threading
-import logging
+import sys
 import time
+import threading
 from flask import Flask, jsonify
-import asyncio
 
-# Configure logging first
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", 
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
+# Create Flask app
 app = Flask(__name__)
 
-# Global variable to track bot status
-bot_status = {"running": False, "error": None, "startup_time": None}
+# Global bot status
+bot_status = {
+    "running": False,
+    "error": None,
+    "startup_time": None
+}
 
-def run_bot_in_thread():
-    """Run the bot in a separate thread"""
+def start_bot():
+    """Start the bot in a background thread"""
     global bot_status
     try:
-        logger.info("Starting VPN Bot in background thread...")
+        print("Starting VPN Bot in background...")
         bot_status["startup_time"] = time.time()
         
-        # Import here to avoid import errors during startup
-        from main import main as run_bot
+        # Import and run the bot
+        from main import main
+        import asyncio
         
         bot_status["running"] = True
         bot_status["error"] = None
-        logger.info("VPN Bot thread started successfully")
+        print("Bot started successfully")
         
         # Run the bot
-        asyncio.run(run_bot())
+        asyncio.run(main())
     except Exception as e:
-        logger.error(f"Bot error: {e}")
+        print(f"Bot error: {e}")
         bot_status["running"] = False
         bot_status["error"] = str(e)
 
 @app.route('/')
 def home():
-    """Home endpoint"""
+    """Home page"""
     return jsonify({
-        "status": "VPN Bot Web Service",
+        "service": "VPN Bot",
+        "status": "running",
         "bot_status": bot_status,
-        "message": "This is a Telegram VPN Bot service",
-        "endpoints": {
-            "health": "/health",
-            "status": "/status"
-        }
+        "endpoints": ["/health", "/status", "/ping"]
     })
 
 @app.route('/health')
 def health():
-    """Health check endpoint for Render"""
-    # Always return 200 for the web service itself
-    # The bot status is tracked separately
-    return jsonify({
-        "status": "healthy",
-        "service": "web",
-        "bot_status": bot_status["running"],
-        "bot_error": bot_status["error"]
-    }), 200
+    """Health check for Render"""
+    return jsonify({"status": "healthy"}), 200
 
 @app.route('/status')
 def status():
-    """Detailed status endpoint"""
+    """Detailed status"""
     return jsonify({
-        "service": "VPN Bot Web Service",
+        "service": "VPN Bot",
         "bot_status": bot_status,
+        "port": os.environ.get('PORT', '5000'),
         "environment": {
             "has_telegram_token": bool(os.getenv("TELEGRAM_BOT_TOKEN")),
-            "has_cryptobot_token": bool(os.getenv("CRYPTOBOT_TESTNET_API_TOKEN")),
-            "has_outline_servers": bool(os.getenv("OUTLINE_API_URL_GERMANY") or os.getenv("OUTLINE_API_URL_FRANCE")),
-            "port": os.environ.get('PORT', '5000')
+            "has_cryptobot_token": bool(os.getenv("CRYPTOBOT_TESTNET_API_TOKEN"))
         }
     })
 
 @app.route('/ping')
 def ping():
-    """Simple ping endpoint"""
-    return jsonify({"pong": True, "timestamp": time.time()})
+    """Simple ping"""
+    return jsonify({"pong": True, "time": time.time()})
 
-if __name__ == '__main__':
-    # Get port from environment (Render sets PORT)
+def main():
+    """Main function to start the service"""
+    # Get port from environment (Render requirement)
     port = int(os.environ.get('PORT', 5000))
     
-    logger.info(f"Starting Flask web service on port {port}")
+    print(f"Starting Flask service on port {port}")
+    print(f"Environment PORT: {os.environ.get('PORT', 'not set')}")
     
-    # Start the bot in a separate thread (non-blocking)
+    # Start bot in background thread
     try:
-        bot_thread = threading.Thread(target=run_bot_in_thread, daemon=True)
+        bot_thread = threading.Thread(target=start_bot, daemon=True)
         bot_thread.start()
-        logger.info("Bot thread started successfully")
+        print("Bot thread started")
     except Exception as e:
-        logger.error(f"Failed to start bot thread: {e}")
-        bot_status["error"] = f"Failed to start bot thread: {e}"
+        print(f"Failed to start bot thread: {e}")
+        bot_status["error"] = str(e)
     
-    # Always start the Flask app regardless of bot status
-    logger.info(f"Starting Flask app on 0.0.0.0:{port}")
-    app.run(host='0.0.0.0', port=port, debug=False, threaded=True) 
+    # Start Flask app (this is the critical part for Render)
+    print(f"Starting Flask app on 0.0.0.0:{port}")
+    app.run(
+        host='0.0.0.0',  # Bind to all interfaces
+        port=port,       # Use PORT from environment
+        debug=False,     # Disable debug mode
+        threaded=True    # Enable threading
+    )
+
+if __name__ == '__main__':
+    main() 
