@@ -49,6 +49,8 @@ def start_bot():
         
     except Exception as e:
         print(f"Bot error: {e}")
+        import traceback
+        traceback.print_exc()
         bot_status["running"] = False
         bot_status["error"] = str(e)
         bot_status["last_check"] = time.time()
@@ -110,6 +112,44 @@ def status():
 def ping():
     """Simple ping"""
     return jsonify({"pong": True, "time": time.time()})
+
+@app.route('/test-bot')
+def test_bot():
+    """Test bot connection"""
+    try:
+        import asyncio
+        from telegram import Bot
+        from config import TELEGRAM_BOT_TOKEN
+        
+        async def check_bot():
+            bot = Bot(token=TELEGRAM_BOT_TOKEN)
+            me = await bot.get_me()
+            webhook_info = await bot.get_webhook_info()
+            return {
+                "bot_name": me.first_name,
+                "bot_username": me.username,
+                "webhook_info": str(webhook_info),
+                "pending_updates": webhook_info.pending_update_count
+            }
+        
+        # Run the async function
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        result = loop.run_until_complete(check_bot())
+        loop.close()
+        
+        return jsonify({
+            "status": "success",
+            "bot_info": result,
+            "bot_status": bot_status
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "bot_status": bot_status
+        }), 500
 
 def main():
     """Main function to start the service"""

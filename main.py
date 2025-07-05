@@ -1068,7 +1068,7 @@ def main() -> None:
         fallbacks=[CommandHandler("cancel", cancel_subscription_flow)],
         per_user=True,
         per_chat=True,
-        per_message=True
+        per_message=False
     )
 
     admin_del_conv_handler = ConversationHandler(
