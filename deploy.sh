@@ -34,6 +34,32 @@ if [ ! -f ".env" ]; then
     exit 1
 fi
 
+# Check for required files
+echo "🔍 Checking required files..."
+required_files=("app.py" "main.py" "requirements.txt" "render.yaml" "config.py")
+missing_files=()
+
+for file in "${required_files[@]}"; do
+    if [ ! -f "$file" ]; then
+        missing_files+=("$file")
+    fi
+done
+
+if [ ${#missing_files[@]} -ne 0 ]; then
+    echo "❌ Missing required files: ${missing_files[*]}"
+    exit 1
+fi
+
+echo "✅ All required files found"
+
+# Check if Flask is in requirements.txt
+if ! grep -q "Flask" requirements.txt; then
+    echo "❌ Flask not found in requirements.txt"
+    exit 1
+fi
+
+echo "✅ Flask dependency found"
+
 # Run health check
 echo "🔍 Running health checks..."
 python health_check.py
@@ -42,27 +68,37 @@ if [ $? -eq 0 ]; then
     echo ""
     echo "✅ Health checks passed!"
     echo ""
-    echo "📋 Next steps:"
+    echo "📋 Render Deployment Steps:"
     echo "1. Push your code to GitHub:"
     echo "   git add ."
-    echo "   git commit -m 'Prepare for deployment'"
+    echo "   git commit -m 'Prepare for Render deployment'"
     echo "   git push"
     echo ""
-    echo "2. Deploy to Railway:"
-    echo "   - Go to https://railway.app"
-    echo "   - Sign up/login"
-    echo "   - Click 'New Project' → 'Deploy from GitHub repo'"
-    echo "   - Select your repository"
-    echo "   - Add environment variables in Railway dashboard"
-    echo "   - Deploy!"
-    echo ""
-    echo "3. Alternative: Deploy to Render:"
+    echo "2. Deploy to Render:"
     echo "   - Go to https://render.com"
-    echo "   - Create new Web Service"
-    echo "   - Connect your GitHub repo"
-    echo "   - Set build command: pip install -r requirements.txt"
-    echo "   - Set start command: python main.py"
-    echo "   - Add environment variables"
+    echo "   - Sign up/login"
+    echo "   - Click 'New +' → 'Web Service'"
+    echo "   - Connect your GitHub repository"
+    echo "   - Render will auto-detect render.yaml"
+    echo "   - Click 'Create Web Service'"
+    echo ""
+    echo "3. Configure Environment Variables:"
+    echo "   - Go to your service → Environment tab"
+    echo "   - Add all variables from your .env file"
+    echo "   - Click 'Save Changes'"
+    echo ""
+    echo "4. Deploy:"
+    echo "   - Go to 'Manual Deploy' tab"
+    echo "   - Click 'Deploy latest commit'"
+    echo "   - Wait for build to complete (2-3 minutes)"
+    echo ""
+    echo "5. Verify:"
+    echo "   - Check logs in Render dashboard"
+    echo "   - Visit your service URL"
+    echo "   - Test health endpoint: /health"
+    echo "   - Test your bot on Telegram"
+    echo ""
+    echo "📖 For detailed instructions, see RENDER_DEPLOYMENT.md"
     echo ""
     echo "🎉 Your bot will be running 24/7 once deployed!"
 else

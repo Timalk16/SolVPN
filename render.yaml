@@ -1,7 +1,28 @@
 services:
-  - type: worker
+  - type: web
     name: vpn-bot
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    startCommand: python app.py
     plan: free
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: ADMIN_USER_ID
+        sync: false
+      - key: CRYPTOBOT_TESTNET_API_TOKEN
+        sync: false
+      - key: CRYPTOBOT_MAINNET_API_TOKEN
+        sync: false
+      - key: OUTLINE_API_URL_GERMANY
+        sync: false
+      - key: OUTLINE_CERT_SHA256_GERMANY
+        sync: false
+      - key: OUTLINE_API_URL_FRANCE
+        sync: false
+      - key: OUTLINE_CERT_SHA256_FRANCE
+        sync: false
+      - key: YOOKASSA_SHOP_ID
+        sync: false
+      - key: YOOKASSA_SECRET_KEY
+        sync: false
