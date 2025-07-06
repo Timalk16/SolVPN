@@ -1067,8 +1067,7 @@ async def main() -> None:
         },
         fallbacks=[CommandHandler("cancel", cancel_subscription_flow)],
         per_user=True,
-        per_chat=True,
-        per_message=True
+        per_chat=True
     )
 
     admin_del_conv_handler = ConversationHandler(
@@ -1076,7 +1075,7 @@ async def main() -> None:
         states={
             AdminConversationState.ADMIN_LIST_SUBS.value: [
                 CallbackQueryHandler(admin_paginate_subs, pattern="^admin_del_page_"),
-                CallbackQueryHandler(admin_sub_chosen_for_deletion, pattern="^admin_del_\d+$"),
+                CallbackQueryHandler(admin_sub_chosen_for_deletion, pattern=r"^admin_del_\d+$"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, admin_sub_chosen_for_deletion),
                 CallbackQueryHandler(admin_cancel_delete_flow, pattern="^admin_cancel_delete$") # Admin cancel button
             ],
@@ -1091,7 +1090,6 @@ async def main() -> None:
         ],
         per_user=True, 
         per_chat=True,
-        per_message=True,
         name="admin_delete_conversation",
     )
 
