@@ -1115,6 +1115,9 @@ async def main() -> None:
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
     application.add_error_handler(error_handler)
 
+    logger.info("Deleting any existing webhook configuration...")
+    await application.bot.delete_webhook()
+
     logger.info("Starting bot polling...")
     await application.run_polling()
 
