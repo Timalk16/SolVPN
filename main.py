@@ -1117,7 +1117,26 @@ async def main() -> None:
     await application.bot.delete_webhook()
 
     logger.info("Starting bot polling...")
-    await application.run_polling()
+    try:
+        # Use a more explicit polling approach
+        await application.initialize()
+        await application.start()
+        await application.updater.start_polling()
+        
+        # Keep the bot running
+        try:
+            # Wait indefinitely
+            while True:
+                await asyncio.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Received keyboard interrupt, shutting down...")
+        finally:
+            await application.stop()
+            await application.shutdown()
+            
+    except Exception as e:
+        logger.error(f"Error during polling: {e}")
+        raise
 
 async def handle_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle subscription renewal request."""
@@ -1220,5 +1239,11 @@ def escape_markdown_v2(text: str) -> str:
     return text
 
 if __name__ == "__main__":
-    import asyncio
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except RuntimeError as e:
+        if "event loop is already running" in str(e):
+            print("Error: Event loop is already running. This usually happens when running in Jupyter/IPython.")
+            print("Please run this script in a fresh terminal or Python process.")
+        else:
+            raise
