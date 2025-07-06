@@ -1068,7 +1068,7 @@ async def main() -> None:
         fallbacks=[CommandHandler("cancel", cancel_subscription_flow)],
         per_user=True,
         per_chat=True,
-        per_message=False
+        per_message=True
     )
 
     admin_del_conv_handler = ConversationHandler(
@@ -1091,7 +1091,7 @@ async def main() -> None:
         ],
         per_user=True, 
         per_chat=True,
-        per_message=False,
+        per_message=True,
         name="admin_delete_conversation",
     )
 
@@ -1108,6 +1108,9 @@ async def main() -> None:
     
     application.add_handler(CallbackQueryHandler(menu_my_subscriptions_handler, pattern="^menu_my_subscriptions$"))
     application.add_handler(CallbackQueryHandler(menu_help_handler, pattern="^menu_help$"))
+    
+    # Add debug handler to log all incoming messages
+    application.add_handler(MessageHandler(filters.ALL, lambda update, context: logger.info(f"Received message: {update.message.text if update.message else 'No text'} from user {update.effective_user.id if update.effective_user else 'Unknown'}")))
     
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
     application.add_error_handler(error_handler)
