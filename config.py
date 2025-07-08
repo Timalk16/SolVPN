@@ -41,15 +41,10 @@ DB_PATH = "vpn_subscriptions.db"
 
 # Duration Plans (separate from country selection)
 DURATION_PLANS = {
-    "test_5min": {
-        "name": "Test (5 min)", 
-        "duration_days": 0.00347, 
-        "price_usdt": 0.1
-    },
     "1_month": {
         "name": "Подписка на 1 месяц",
         "duration_days": 30,
-        "price_usdt": 5.00
+        "price_usdt": 0.10
     },
     "3_months": {
         "name": "Подписка на 3 месяца",
