@@ -84,15 +84,27 @@ YOOKASSA_SECRET_KEY = os.getenv("YOOKASSA_SECRET_KEY", "YOUR_YOOKASSA_SECRET_KEY
 # CryptoBot API Configuration
 CRYPTOBOT_TESTNET_API_TOKEN = os.getenv("CRYPTOBOT_TESTNET_API_TOKEN")
 CRYPTOBOT_MAINNET_API_TOKEN = os.getenv("CRYPTOBOT_MAINNET_API_TOKEN")
+
+# Validate tokens based on network mode
 if not CRYPTOBOT_TESTNET_API_TOKEN:
-    raise ValueError("CRYPTOBOT_TESTNET_API_TOKEN not found in environment variables or .env file")
+    logger.warning("CRYPTOBOT_TESTNET_API_TOKEN not found in environment variables")
+
+if not CRYPTOBOT_MAINNET_API_TOKEN:
+    logger.warning("CRYPTOBOT_MAINNET_API_TOKEN not found in environment variables")
 
 # Debug log the token (first few characters for security)
 masked_token = CRYPTOBOT_TESTNET_API_TOKEN[:8] + "..." + CRYPTOBOT_TESTNET_API_TOKEN[-4:]
 logger.info(f"Loaded CryptoBot testnet token: {masked_token}")
 
-# Use testnet for development
-USE_TESTNET = True
+# Debug log the mainnet token if available
+if CRYPTOBOT_MAINNET_API_TOKEN:
+    masked_mainnet_token = CRYPTOBOT_MAINNET_API_TOKEN[:8] + "..." + CRYPTOBOT_MAINNET_API_TOKEN[-4:]
+    logger.info(f"Loaded CryptoBot mainnet token: {masked_mainnet_token}")
+else:
+    logger.warning("CRYPTOBOT_MAINNET_API_TOKEN not found in environment variables")
+
+# Use mainnet for production
+USE_TESTNET = False
 CRYPTOBOT_API_TOKEN = CRYPTOBOT_TESTNET_API_TOKEN if USE_TESTNET else CRYPTOBOT_MAINNET_API_TOKEN
 
 # Admin User ID
