@@ -167,15 +167,8 @@ def main():
     print(f"Starting VPN Bot service on port {port}")
     print(f"Environment PORT: {os.environ.get('PORT', 'not set')}")
     
-    # Start bot in background thread
-    bot_thread = threading.Thread(target=start_bot, daemon=True)
-    bot_thread.start()
-    print("Bot thread started successfully")
-    
-    # Give bot a moment to start
-    time.sleep(3)
-    
-    # Start Flask app (this is the critical part for Render)
+    # Note: Bot is started by wsgi.py in production, so we don't start it here
+    # to avoid conflicts. Only start Flask app.
     print(f"Starting Flask app on 0.0.0.0:{port}")
     app.run(
         host='0.0.0.0',  # Bind to all interfaces

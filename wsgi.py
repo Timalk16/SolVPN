@@ -26,9 +26,21 @@ bot_status = {
     "last_check": None
 }
 
+# Bot instance management
+_bot_started = False
+_bot_thread = None
+
 def start_bot():
     """Start the bot in a separate thread"""
-    global bot_status
+    global bot_status, _bot_started, _bot_thread
+    
+    # Prevent multiple bot instances
+    if _bot_started:
+        print("Bot already started, skipping...")
+        return
+    
+    _bot_started = True
+    
     try:
         print("Starting VPN Bot in background thread...")
         bot_status["startup_time"] = time.time()
@@ -65,8 +77,18 @@ def start_bot():
         bot_status["last_check"] = time.time()
 
 # Start bot in background thread when module is imported
-bot_thread = threading.Thread(target=start_bot, daemon=True)
-bot_thread.start()
+# Only start if not already started
+if not _bot_started:
+    print("Initializing bot startup...")
+    _bot_thread = threading.Thread(target=start_bot, daemon=True)
+    _bot_thread.start()
+    print("Bot thread created and started")
+else:
+    print("Bot already started, skipping thread creation")
+
+# Add a small delay to ensure proper initialization
+import time
+time.sleep(1)
 
 # Export the Flask app for WSGI servers
 application = app 
