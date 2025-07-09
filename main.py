@@ -225,7 +225,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "3\\. Следуйте инструкциям для завершения оплаты\\.\n"
         "4\\. После подтверждения оплаты вы получите ключ доступа к VPN\\.\n\n"
         "Используйте /my\\_subscriptions для проверки вашего текущего доступа\\.\n"
-        "Если у вас возникли проблемы, обратитесь в поддержку \\(детали будут добавлены здесь\\)\\."
+        "Если у вас возникли проблемы, обратитесь в поддержку: @SolSuprt или воспользуйтесь командой /support\\."
         f"{testnet_notice}"
     )
     if user.id == ADMIN_USER_ID:
@@ -972,12 +972,21 @@ async def menu_help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "3\\. Следуйте инструкциям для завершения оплаты\\.\n"
         "4\\. После подтверждения оплаты вы получите ключ доступа к VPN\\.\n\n"
         "Используйте /my\\_subscriptions для проверки вашего текущего доступа\\.\n"
-        "Если у вас возникли проблемы, обратитесь в поддержку \\(детали будут добавлены здесь\\)\\."
+        "Если у вас возникли проблемы, обратитесь в поддержку: @SolSuprt или воспользуйтесь командой /support\\."
         f"{testnet_notice}"
     )
     if user.id == ADMIN_USER_ID:
         help_text += ("\n\nAdmin Commands:\n/admin\\_del\\_sub \\- Delete a user subscription\\.")
     await context.bot.send_message(chat_id=chat_id, text=help_text, parse_mode=ParseMode.MARKDOWN_V2)
+
+@rate_limit_command("support")
+async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send a message with a link or mention to the support account @SolSuprt."""
+    support_text = (
+        "Связаться с поддержкой можно по аккаунту: @SolSuprt\n"
+        "Нажмите на ник или перейдите по ссылке: https://t.me/SolSuprt"
+    )
+    await update.message.reply_text(support_text)
 
 # --- Fallback and Error Handlers ---
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1103,6 +1112,7 @@ async def main() -> None:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("my_subscriptions", my_subscriptions_command))
+    application.add_handler(CommandHandler("support", support_command))
     
     # Add handlers for buttons outside conversation flow
     application.add_handler(CallbackQueryHandler(back_to_menu_handler, pattern="^back_to_menu$"))
