@@ -1027,6 +1027,9 @@ async def post_init(application: Application) -> None:
     except Exception as e:
         logger.error(f"Could not set admin commands for admin {ADMIN_USER_ID}: {e}")
 
+async def log_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info(f"Received message: {update.message.text if update.message else 'No text'} from user {update.effective_user.id if update.effective_user else 'Unknown'}")
+
 # --- Main Function ---
 async def main() -> None:
     """Entry point for the bot: initializes the database, sets up handlers, and starts polling."""
@@ -1108,7 +1111,7 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(menu_help_handler, pattern="^menu_help$"))
     
     # Add debug handler to log all incoming messages
-    application.add_handler(MessageHandler(filters.ALL, lambda update, context: logger.info(f"Received message: {update.message.text if update.message else 'No text'} from user {update.effective_user.id if update.effective_user else 'Unknown'}")))
+    application.add_handler(MessageHandler(filters.ALL, log_all_messages))
     
     application.add_handler(MessageHandler(filters.COMMAND, unknown_command))
     application.add_error_handler(error_handler)
