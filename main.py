@@ -1070,7 +1070,8 @@ async def main() -> None:
         },
         fallbacks=[CommandHandler("cancel", cancel_subscription_flow)],
         per_user=True,
-        per_chat=True
+        per_chat=True,
+        allow_reentry=True
     )
 
     admin_del_conv_handler = ConversationHandler(
