@@ -390,6 +390,11 @@ async def payment_method_chosen(update: Update, context: ContextTypes.DEFAULT_TY
                     "💳 Оплата картой временно недоступна.\n\n"
                     "Пожалуйста, используйте оплату криптовалютой или обратитесь к администратору."
                 )
+            elif "network" in str(e).lower() or "timeout" in str(e).lower() or "connection" in str(e).lower():
+                error_message = (
+                    "💳 Ошибка сети при создании платежа.\n\n"
+                    "Пожалуйста, попробуйте еще раз через несколько минут или используйте оплату криптовалютой."
+                )
             else:
                 error_message = "Извините, произошла ошибка при создании платежа. Пожалуйста, попробуйте позже."
             
@@ -1180,25 +1185,49 @@ async def main() -> None:
 
     logger.info("Starting bot polling...")
     try:
-        # Use a more explicit polling approach
+        # Use a more explicit polling approach with better error handling
         await application.initialize()
         await application.start()
-        await application.updater.start_polling()
+        await application.updater.start_polling(
+            drop_pending_updates=True,
+            allowed_updates=Update.ALL_TYPES,
+            read_timeout=30,
+            write_timeout=30,
+            connect_timeout=30,
+            pool_timeout=30
+        )
         
-        # Keep the bot running
-        try:
-            # Wait indefinitely
-            while True:
+        # Keep the bot running with retry logic
+        retry_count = 0
+        max_retries = 5
+        
+        while True:
+            try:
                 await asyncio.sleep(1)
-        except KeyboardInterrupt:
-            logger.info("Received keyboard interrupt, shutting down...")
-        finally:
+                retry_count = 0  # Reset retry count on successful iteration
+            except KeyboardInterrupt:
+                logger.info("Received keyboard interrupt, shutting down...")
+                break
+            except Exception as e:
+                retry_count += 1
+                logger.error(f"Error during polling (attempt {retry_count}/{max_retries}): {e}")
+                
+                if retry_count >= max_retries:
+                    logger.error("Max retries reached, shutting down...")
+                    break
+                
+                # Wait before retrying
+                await asyncio.sleep(5)
+                
+    except Exception as e:
+        logger.error(f"Critical error during polling: {e}")
+        raise
+    finally:
+        try:
             await application.stop()
             await application.shutdown()
-            
-    except Exception as e:
-        logger.error(f"Error during polling: {e}")
-        raise
+        except Exception as e:
+            logger.error(f"Error during shutdown: {e}")
 
 async def handle_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle subscription renewal request."""

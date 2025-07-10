@@ -224,7 +224,16 @@ async def get_yookassa_payment_details(amount_rub: float, plan_name: str) -> Tup
             metadata={
                 "order_id": order_id,
                 "plan_name": plan_name
-            }
+            },
+            # Specify payment methods to show on Youkassa page
+            # These will be available when user is redirected to Youkassa
+            payment_method_data=[
+                {"type": "bank_card"},      # Bank cards (Visa, MasterCard, etc.)
+                {"type": "yoo_money"},      # YooMoney
+                {"type": "sberpay"},        # SberPay
+                {"type": "tinkoff_bank"},   # Tinkoff Pay
+                {"type": "sbp"}             # SBP (System of Fast Payments)
+            ]
         )
         
         # Create payment
@@ -321,7 +330,15 @@ def generate_yookassa_payment_link(amount_rub, description, order_id):
             },
             capture=True,
             description=description,
-            metadata={"order_id": order_id}
+            metadata={"order_id": order_id},
+            # Specify payment methods to show on Youkassa page
+            payment_method_data=[
+                {"type": "bank_card"},      # Bank cards (Visa, MasterCard, etc.)
+                {"type": "yoo_money"},      # YooMoney
+                {"type": "sberpay"},        # SberPay
+                {"type": "tinkoff_bank"},   # Tinkoff Pay
+                {"type": "sbp"}             # SBP (System of Fast Payments)
+            ]
         )
         
         payment = Payment.create(payment_request)
