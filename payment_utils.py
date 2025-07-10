@@ -225,7 +225,6 @@ async def get_yookassa_payment_details(amount_rub: float, plan_name: str) -> Tup
                 "order_id": order_id,
                 "plan_name": plan_name
             }
-            # Payment methods are managed in the Youkassa dashboard
         )
         
         # Create payment
@@ -323,7 +322,6 @@ def generate_yookassa_payment_link(amount_rub, description, order_id):
             capture=True,
             description=description,
             metadata={"order_id": order_id}
-            # Payment methods are managed in the Youkassa dashboard
         )
         
         payment = Payment.create(payment_request)
