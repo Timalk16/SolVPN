@@ -383,8 +383,18 @@ async def payment_method_chosen(update: Update, context: ContextTypes.DEFAULT_TY
             
         except Exception as e:
             logger.error(f"Error creating card payment: {e}")
+            
+            # Check if it's a configuration error
+            if "Youkassa is not configured" in str(e):
+                error_message = (
+                    "💳 Оплата картой временно недоступна.\n\n"
+                    "Пожалуйста, используйте оплату криптовалютой или обратитесь к администратору."
+                )
+            else:
+                error_message = "Извините, произошла ошибка при создании платежа. Пожалуйста, попробуйте позже."
+            
             await query.edit_message_text(
-                "Извините, произошла ошибка при создании платежа. Пожалуйста, попробуйте позже.",
+                error_message,
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("⬅️ Назад к выбору срока", callback_data="back_to_duration")
                 ]])

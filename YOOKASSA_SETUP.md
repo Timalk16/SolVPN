@@ -123,18 +123,35 @@ python test_yookassa.py
 
 ### Common Issues
 
-1. **"Youkassa credentials not configured properly"**
+1. **"Youkassa is not configured. Please set YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY in your environment variables."**
 
-   - Check your `.env` file has correct credentials
-   - Verify Shop ID and Secret Key are correct
+   - Add the required environment variables to your `.env` file:
+     ```bash
+     YOOKASSA_SHOP_ID=your_shop_id_here
+     YOOKASSA_SECRET_KEY=your_secret_key_here
+     ```
+   - Make sure both variables are set and not empty
+   - Restart the bot after adding the credentials
 
-2. **Payment verification fails**
+2. **"account_id and secret_key are required"**
+
+   - This error occurs when Youkassa credentials are missing or invalid
+   - Double-check your Shop ID and Secret Key from the Youkassa dashboard
+   - Ensure there are no extra spaces or characters in the values
+
+3. **"Оплата картой временно недоступна"**
+
+   - This is a user-friendly message shown when Youkassa is not configured
+   - Users will be prompted to use crypto payment instead
+   - Configure Youkassa credentials to enable card payments
+
+4. **Payment verification fails**
 
    - Check Youkassa dashboard for payment status
    - Verify webhook configuration (if using)
 
-3. **Import errors**
-   - Ensure `yookassa` package is installed
+5. **Import errors**
+   - Ensure `yookassa` package is installed: `pip install yookassa`
    - Check Python environment and dependencies
 
 ### Logs

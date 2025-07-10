@@ -25,10 +25,16 @@ else:
     logger.error("CRYPTOBOT_API_TOKEN is not set!")
 
 # Initialize Youkassa configuration
-if YOOKASSA_SHOP_ID and YOOKASSA_SHOP_ID != "YOUR_YOOKASSA_SHOP_ID":
-    Configuration.account_id = YOOKASSA_SHOP_ID
-    Configuration.secret_key = YOOKASSA_SECRET_KEY
-    logger.info(f"Youkassa configured with shop ID: {YOOKASSA_SHOP_ID[:8]}...")
+YOOKASSA_CONFIGURED = False
+if YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY and YOOKASSA_SHOP_ID != "YOUR_YOOKASSA_SHOP_ID":
+    try:
+        Configuration.account_id = YOOKASSA_SHOP_ID
+        Configuration.secret_key = YOOKASSA_SECRET_KEY
+        YOOKASSA_CONFIGURED = True
+        logger.info(f"Youkassa configured with shop ID: {YOOKASSA_SHOP_ID[:8]}...")
+    except Exception as e:
+        logger.error(f"Error configuring Youkassa: {e}")
+        YOOKASSA_CONFIGURED = False
 else:
     logger.warning("Youkassa credentials not configured properly")
 
@@ -196,6 +202,9 @@ async def get_yookassa_payment_details(amount_rub: float, plan_name: str) -> Tup
     """
     Creates a Youkassa payment and returns payment instructions and payment ID.
     """
+    if not YOOKASSA_CONFIGURED:
+        raise Exception("Youkassa is not configured. Please set YOOKASSA_SHOP_ID and YOOKASSA_SECRET_KEY in your environment variables.")
+    
     try:
         # Generate unique order ID
         order_id = str(uuid.uuid4())
@@ -244,6 +253,10 @@ async def verify_yookassa_payment(payment_id: str) -> bool:
     Verifies if a Youkassa payment has been completed.
     Returns True if payment is confirmed, False otherwise.
     """
+    if not YOOKASSA_CONFIGURED:
+        logger.error("Youkassa is not configured. Cannot verify payment.")
+        return False
+    
     try:
         # Get payment information
         payment = Payment.find_one(payment_id)
@@ -262,6 +275,10 @@ async def get_yookassa_payment_status(payment_id: str) -> str:
     Gets the current status of a Youkassa payment.
     Returns the status as a string.
     """
+    if not YOOKASSA_CONFIGURED:
+        logger.error("Youkassa is not configured. Cannot get payment status.")
+        return "error"
+    
     try:
         payment = Payment.find_one(payment_id)
         logger.info(f"Youkassa payment {payment_id} status: {payment.status}")
