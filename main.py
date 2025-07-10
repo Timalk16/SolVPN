@@ -81,8 +81,8 @@ def build_payment_method_keyboard(duration_plan_id: str) -> InlineKeyboardMarkup
     """Build the inline keyboard for payment method selection for a given duration plan."""
     plan_details = DURATION_PLANS[duration_plan_id]
     keyboard = [
-        [InlineKeyboardButton(f"💳 Оплатить {plan_details['price_rub']:.0f} ₽ картой", callback_data="pay_card")],
-        [InlineKeyboardButton(f"💰 Оплатить {plan_details['price_usdt']:.2f} USDT (криптовалюта)", callback_data="pay_crypto")],
+        [InlineKeyboardButton(f"💳 Картой или СБП", callback_data="pay_card")],
+        [InlineKeyboardButton(f"💰 Криптой", callback_data="pay_crypto")],
         [InlineKeyboardButton("⬅️ Назад к выбору срока", callback_data="back_to_duration")],
     ]
     return InlineKeyboardMarkup(keyboard)
