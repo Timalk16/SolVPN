@@ -1063,6 +1063,14 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
         logger.error("1. Multiple deployments are running simultaneously")
         logger.error("2. Local development bot is running while production is also running")
         logger.error("3. Render/Railway is restarting the service multiple times")
+        logger.error("4. Bot is restarting during deployment")
+        
+        # Try to delete webhook and restart polling
+        try:
+            await context.bot.delete_webhook()
+            logger.info("Webhook deleted, attempting to restart polling...")
+        except Exception as e:
+            logger.error(f"Error deleting webhook: {e}")
         return
     
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
@@ -1182,6 +1190,10 @@ async def main() -> None:
 
     logger.info("Deleting any existing webhook configuration...")
     await application.bot.delete_webhook()
+
+    # Add a small delay to prevent conflicts during deployment
+    logger.info("Waiting 2 seconds before starting polling...")
+    await asyncio.sleep(2)
 
     logger.info("Starting bot polling...")
     try:
