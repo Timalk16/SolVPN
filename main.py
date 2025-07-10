@@ -1190,34 +1190,15 @@ async def main() -> None:
         await application.start()
         await application.updater.start_polling(
             drop_pending_updates=True,
-            allowed_updates=Update.ALL_TYPES,
-            read_timeout=30,
-            write_timeout=30,
-            connect_timeout=30,
-            pool_timeout=30
+            allowed_updates=Update.ALL_TYPES
         )
         
-        # Keep the bot running with retry logic
-        retry_count = 0
-        max_retries = 5
-        
-        while True:
-            try:
+        # Keep the bot running
+        try:
+            while True:
                 await asyncio.sleep(1)
-                retry_count = 0  # Reset retry count on successful iteration
-            except KeyboardInterrupt:
-                logger.info("Received keyboard interrupt, shutting down...")
-                break
-            except Exception as e:
-                retry_count += 1
-                logger.error(f"Error during polling (attempt {retry_count}/{max_retries}): {e}")
-                
-                if retry_count >= max_retries:
-                    logger.error("Max retries reached, shutting down...")
-                    break
-                
-                # Wait before retrying
-                await asyncio.sleep(5)
+        except KeyboardInterrupt:
+            logger.info("Received keyboard interrupt, shutting down...")
                 
     except Exception as e:
         logger.error(f"Critical error during polling: {e}")
