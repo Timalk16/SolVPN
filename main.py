@@ -366,21 +366,31 @@ async def payment_method_chosen(update: Update, context: ContextTypes.DEFAULT_TY
                 plan['price_rub'],
                 plan['name']
             )
-            
+
+            # Try to extract the payment link from the instructions (fallback for old API)
+            import re
+            url_match = re.search(r'(https?://\S+)', instructions)
+            confirmation_url = url_match.group(1) if url_match else None
+
+            # Remove the raw link from the instructions if present
+            if confirmation_url:
+                instructions = instructions.replace(f"Ссылка для оплаты: {confirmation_url}", "")
+
             context.user_data['payment_id'] = payment_id
             context.user_data['payment_type'] = 'card'
-            
-            keyboard = [
-                [InlineKeyboardButton("✅ Я оплатил", callback_data="confirm_payment")],
-                [InlineKeyboardButton("❌ Отмена", callback_data="cancel_subscription_flow")]
-            ]
-            
+
+            keyboard = []
+            if confirmation_url:
+                keyboard.append([InlineKeyboardButton("💳 Оплатить через Youkassa", url=confirmation_url)])
+            keyboard.append([InlineKeyboardButton("✅ Я оплатил", callback_data="confirm_payment")])
+            keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_subscription_flow")])
+
             await query.edit_message_text(
-                instructions,
+                instructions.strip(),
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode=ParseMode.MARKDOWN
             )
-            
+
         except Exception as e:
             logger.error(f"Error creating card payment: {e}")
             
