@@ -66,7 +66,7 @@ ADMIN_PAGE_SIZE = 10  # Number of subscriptions per admin page
 def get_duration_plan_details_text(plan_id: str) -> str:
     """Return a formatted string with duration plan details for a given plan_id."""
     plan = DURATION_PLANS[plan_id]
-    return f"{plan['name']} - {plan['price_usdt']:.2f} USDT"
+    return f"{plan['name']} - {plan['price_rub']:.0f} ₽"
 
 def build_duration_selection_keyboard() -> InlineKeyboardMarkup:
     """Build the inline keyboard for duration selection."""
@@ -81,8 +81,8 @@ def build_payment_method_keyboard(duration_plan_id: str) -> InlineKeyboardMarkup
     """Build the inline keyboard for payment method selection for a given duration plan."""
     plan_details = DURATION_PLANS[duration_plan_id]
     keyboard = [
-        [InlineKeyboardButton(f"💰 Оплатить {plan_details['price_usdt']:.2f} USDT (криптовалюта)", callback_data="pay_crypto")],
         [InlineKeyboardButton(f"💳 Оплатить {plan_details['price_rub']:.0f} ₽ картой", callback_data="pay_card")],
+        [InlineKeyboardButton(f"💰 Оплатить {plan_details['price_usdt']:.2f} USDT (криптовалюта)", callback_data="pay_crypto")],
         [InlineKeyboardButton("⬅️ Назад к выбору срока", callback_data="back_to_duration")],
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -301,7 +301,7 @@ async def duration_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     plan_details = DURATION_PLANS[duration_id]
     text = (
         f"Вы выбрали: {plan_details['name']}\n"
-        f"Цена: {plan_details['price_usdt']:.2f} USDT.\n\n"
+        f"Цена: {plan_details['price_rub']:.0f} ₽.\n\n"
         "Пожалуйста, выберите способ оплаты:"
     )
     reply_markup = build_payment_method_keyboard(duration_id)
