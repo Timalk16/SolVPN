@@ -38,7 +38,7 @@ from outline_utils import (
 from payment_utils import (
     generate_yookassa_payment_link, get_crypto_payment_details,
     verify_yookassa_payment, verify_crypto_payment, get_testnet_status,
-    get_payment_status
+    get_payment_status, get_yookassa_payment_details, get_yookassa_payment_status
 )
 from scheduler_tasks import check_expired_subscriptions
 
@@ -82,6 +82,7 @@ def build_payment_method_keyboard(duration_plan_id: str) -> InlineKeyboardMarkup
     plan_details = DURATION_PLANS[duration_plan_id]
     keyboard = [
         [InlineKeyboardButton(f"💰 Оплатить {plan_details['price_usdt']:.2f} USDT (криптовалюта)", callback_data="pay_crypto")],
+        [InlineKeyboardButton(f"💳 Оплатить {plan_details['price_rub']:.0f} ₽ картой", callback_data="pay_card")],
         [InlineKeyboardButton("⬅️ Назад к выбору срока", callback_data="back_to_duration")],
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -358,6 +359,38 @@ async def payment_method_chosen(update: Update, context: ContextTypes.DEFAULT_TY
             )
             return UserConversationState.CHOOSE_DURATION.value
     
+    elif query.data == "pay_card":
+        try:
+            # Generate Youkassa payment details
+            instructions, payment_id = await get_yookassa_payment_details(
+                plan['price_rub'],
+                plan['name']
+            )
+            
+            context.user_data['payment_id'] = payment_id
+            context.user_data['payment_type'] = 'card'
+            
+            keyboard = [
+                [InlineKeyboardButton("✅ Я оплатил", callback_data="confirm_payment")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="cancel_subscription_flow")]
+            ]
+            
+            await query.edit_message_text(
+                instructions,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+        except Exception as e:
+            logger.error(f"Error creating card payment: {e}")
+            await query.edit_message_text(
+                "Извините, произошла ошибка при создании платежа. Пожалуйста, попробуйте позже.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⬅️ Назад к выбору срока", callback_data="back_to_duration")
+                ]])
+            )
+            return UserConversationState.CHOOSE_DURATION.value
+    
     return UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value
 
 async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -379,17 +412,21 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     try:
         # First check payment status
-        status = await get_payment_status(payment_id)
-        logger.info(f"Payment status check result: {status}")
+        if payment_type == 'crypto':
+            status = await get_payment_status(payment_id)
+            logger.info(f"Crypto payment status check result: {status}")
+        else:  # card payment
+            status = await get_yookassa_payment_status(payment_id)
+            logger.info(f"Card payment status check result: {status}")
         
-        if status == "paid":
+        if status == "paid" or status == "succeeded":
             # Verify the payment
             if payment_type == 'crypto':
                 is_verified = await verify_crypto_payment(payment_id)
                 logger.info(f"Crypto payment verification result: {is_verified}")
-            else:
+            else:  # card payment
                 is_verified = await verify_yookassa_payment(payment_id)
-                logger.info(f"YouKassa payment verification result: {is_verified}")
+                logger.info(f"Card payment verification result: {is_verified}")
             
             if is_verified:
                 # Create subscription
@@ -451,10 +488,11 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     context.user_data['payment_id'] = payment_id
                     
                     # Move to country selection
+                    price_text = f"{plan['price_usdt']:.2f} USDT" if payment_type == 'crypto' else f"{plan['price_rub']:.0f} ₽"
                     text = (
                         f"✅ Оплата прошла успешно!\n\n"
                         f"Срок: {plan['name']}\n"
-                        f"Цена: {plan['price_usdt']:.2f} USDT\n\n"
+                        f"Цена: {price_text}\n\n"
                         f"Теперь выберите пакет стран:"
                     )
                     reply_markup = build_country_selection_keyboard()

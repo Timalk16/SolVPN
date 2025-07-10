@@ -7,5 +7,5 @@ requests>=2.32.0
 aiohttp>=3.12.0
 Flask>=2.3.0
 gunicorn>=21.0.0
-# For YouKassa (if you proceed with real integration):
-# yookassa
+# For YouKassa integration:
+yookassa>=3.5.0

@@ -4,7 +4,12 @@ import logging
 import aiohttp
 import json
 from typing import Tuple, Optional
-from config import CRYPTOBOT_TESTNET_API_TOKEN, CRYPTOBOT_MAINNET_API_TOKEN, DURATION_PLANS, USE_TESTNET, TELEGRAM_BOT_TOKEN
+from config import CRYPTOBOT_TESTNET_API_TOKEN, CRYPTOBOT_MAINNET_API_TOKEN, DURATION_PLANS, USE_TESTNET, TELEGRAM_BOT_TOKEN, YOOKASSA_SHOP_ID, YOOKASSA_SECRET_KEY
+
+# Import Youkassa SDK
+from yookassa import Configuration, Payment
+from yookassa.domain.request import PaymentRequest
+from yookassa.domain.common import ConfirmationType
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -18,6 +23,14 @@ if CRYPTOBOT_API_TOKEN:
     logger.info(f"Using CryptoBot token: {masked_token}")
 else:
     logger.error("CRYPTOBOT_API_TOKEN is not set!")
+
+# Initialize Youkassa configuration
+if YOOKASSA_SHOP_ID and YOOKASSA_SHOP_ID != "YOUR_YOOKASSA_SHOP_ID":
+    Configuration.account_id = YOOKASSA_SHOP_ID
+    Configuration.secret_key = YOOKASSA_SECRET_KEY
+    logger.info(f"Youkassa configured with shop ID: {YOOKASSA_SHOP_ID[:8]}...")
+else:
+    logger.warning("Youkassa credentials not configured properly")
 
 # API endpoints
 API_BASE_URL = "https://testnet-pay.crypt.bot/api" if USE_TESTNET else "https://pay.crypt.bot/api"
@@ -179,6 +192,85 @@ async def get_payment_status(invoice_id: str) -> str:
         logger.error(f"Error getting payment status: {str(e)}")
         return "error"
 
+async def get_yookassa_payment_details(amount_rub: float, plan_name: str) -> Tuple[str, str]:
+    """
+    Creates a Youkassa payment and returns payment instructions and payment ID.
+    """
+    try:
+        # Generate unique order ID
+        order_id = str(uuid.uuid4())
+        
+        # Create payment request
+        payment_request = PaymentRequest(
+            amount={
+                "value": str(amount_rub),
+                "currency": "RUB"
+            },
+            confirmation={
+                "type": ConfirmationType.REDIRECT,
+                "return_url": f"https://t.me/{get_bot_username()}?start=payment_success"
+            },
+            capture=True,
+            description=f"Подписка на VPN - {plan_name}",
+            metadata={
+                "order_id": order_id,
+                "plan_name": plan_name
+            }
+        )
+        
+        # Create payment
+        payment = Payment.create(payment_request)
+        payment_id = payment.id
+        confirmation_url = payment.confirmation.confirmation_url
+        
+        instructions = (
+            f"💳 Оплата картой через Youkassa\n\n"
+            f"Пожалуйста, оплатите {amount_rub:.2f} ₽ за вашу подписку '{plan_name}'.\n\n"
+            f"1. Нажмите на ссылку для оплаты ниже\n"
+            f"2. Следуйте инструкциям на странице Youkassa\n"
+            f"3. После успешной оплаты нажмите кнопку 'Я оплатил' ниже\n\n"
+            f"Ссылка для оплаты: {confirmation_url}"
+        )
+        
+        logger.info(f"Created Youkassa payment: {payment_id}")
+        return instructions, payment_id
+        
+    except Exception as e:
+        logger.error(f"Error creating Youkassa payment: {str(e)}")
+        raise
+
+async def verify_yookassa_payment(payment_id: str) -> bool:
+    """
+    Verifies if a Youkassa payment has been completed.
+    Returns True if payment is confirmed, False otherwise.
+    """
+    try:
+        # Get payment information
+        payment = Payment.find_one(payment_id)
+        
+        logger.info(f"Youkassa payment {payment_id} status: {payment.status}")
+        
+        # Check if payment is successful
+        return payment.status == "succeeded"
+        
+    except Exception as e:
+        logger.error(f"Error verifying Youkassa payment: {str(e)}")
+        return False
+
+async def get_yookassa_payment_status(payment_id: str) -> str:
+    """
+    Gets the current status of a Youkassa payment.
+    Returns the status as a string.
+    """
+    try:
+        payment = Payment.find_one(payment_id)
+        logger.info(f"Youkassa payment {payment_id} status: {payment.status}")
+        return payment.status
+        
+    except Exception as e:
+        logger.error(f"Error getting Youkassa payment status: {str(e)}")
+        return "error"
+
 def get_bot_username() -> str:
     """Extract bot username from the token."""
     try:
@@ -196,35 +288,39 @@ def get_bot_username() -> str:
 
 def generate_yookassa_payment_link(amount_rub, description, order_id):
     """
-    MOCK: Generates a placeholder YouKassa payment link.
-    In a real scenario, you'd use the YouKassa SDK to create a payment object
-    and get a confirmation_url.
+    DEPRECATED: Use get_yookassa_payment_details instead.
+    This function is kept for backward compatibility.
     """
-    # from yookassa import Configuration, Payment
-    # Configuration.account_id = YOOKASSA_SHOP_ID
-    # Configuration.secret_key = YOOKASSA_SECRET_KEY
-    # payment = Payment.create({
-    #     "amount": {"value": str(amount_rub), "currency": "RUB"},
-    #     "confirmation": {"type": "redirect", "return_url": "https://t.me/YourBotUsername?start=payment_success"}, # Example
-    #     "capture": True,
-    #     "description": description,
-    #     "metadata": {"order_id": order_id}
-    # })
-    # return payment.confirmation.confirmation_url, payment.id
-    print(f"[MOCK YOOKASSA] Generating payment link for {amount_rub} RUB, order {order_id}")
-    mock_payment_id = f"yk_{uuid.uuid4()}"
-    return f"https://yookassa.ru/pay/mock_payment_url_for_{mock_payment_id}", mock_payment_id
+    logger.warning("generate_yookassa_payment_link is deprecated. Use get_yookassa_payment_details instead.")
+    try:
+        payment_request = PaymentRequest(
+            amount={
+                "value": str(amount_rub),
+                "currency": "RUB"
+            },
+            confirmation={
+                "type": ConfirmationType.REDIRECT,
+                "return_url": f"https://t.me/{get_bot_username()}?start=payment_success"
+            },
+            capture=True,
+            description=description,
+            metadata={"order_id": order_id}
+        )
+        
+        payment = Payment.create(payment_request)
+        return payment.confirmation.confirmation_url, payment.id
+        
+    except Exception as e:
+        logger.error(f"Error in generate_yookassa_payment_link: {str(e)}")
+        # Fallback to mock for testing
+        mock_payment_id = f"yk_{uuid.uuid4()}"
+        return f"https://yookassa.ru/pay/mock_payment_url_for_{mock_payment_id}", mock_payment_id
 
-async def verify_yookassa_payment(payment_id):
+async def verify_yookassa_payment_legacy(payment_id):
     """
-    MOCK: Simulates verifying a YouKassa payment.
-    Real: Use YouKassa API or webhook to check payment status.
+    Legacy function for backward compatibility.
     """
-    # from yookassa import Payment
-    # payment_info = Payment.find_one(payment_id)
-    # return payment_info.status == 'succeeded'
-    print(f"[MOCK YOOKASSA] Verifying payment {payment_id}. Assuming success for demo.")
-    return True # Assume success for demo
+    return await verify_yookassa_payment(payment_id)
 
 def get_testnet_status() -> str:
     """Returns a warning message if in testnet mode."""
