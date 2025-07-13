@@ -725,7 +725,12 @@ async def admin_delete_subscription_start(update: Update, context: ContextTypes.
     for sub_id, user_id, username, first_name, duration_plan_id, country_package_id, end_date_str, status, countries in subs_to_display:
         user_display = username or first_name or f"User {user_id}"
         plan_name = DURATION_PLANS.get(duration_plan_id, {}).get("name", "Unknown")
-        end_date_short = end_date_str[:10] if end_date_str else "N/A"
+        # Handle both string and datetime objects from different databases
+        if isinstance(end_date_str, str):
+            end_date_short = end_date_str[:10] if end_date_str else "N/A"
+        else:
+            # PostgreSQL returns datetime objects directly
+            end_date_short = end_date_str.strftime('%Y-%m-%d') if end_date_str else "N/A"
         
         btn_text = f"ID:{sub_id} U:{user_display[:10]} P:{plan_name[:7]} S:{status[:6]}"
         if len(btn_text) > 60 : btn_text = btn_text[:57] + "..."
