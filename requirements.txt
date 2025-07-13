@@ -9,3 +9,5 @@ Flask>=2.3.0
 gunicorn>=21.0.0
 # For YouKassa integration:
 yookassa>=3.5.0
+# PostgreSQL support:
+psycopg2-binary>=2.9.0

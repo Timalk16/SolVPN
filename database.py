@@ -1,8 +1,39 @@
 import sqlite3
 import datetime
-from config import DB_PATH
+from config import DB_PATH, USE_POSTGRESQL
+
+# Import PostgreSQL functions if PostgreSQL is enabled
+if USE_POSTGRESQL:
+    try:
+        from database_postgresql import (
+            init_db as init_postgresql_db,
+            add_user_if_not_exists as add_user_if_not_exists_postgresql,
+            create_subscription_record as create_subscription_record_postgresql,
+            update_subscription_country_package as update_subscription_country_package_postgresql,
+            add_subscription_country as add_subscription_country_postgresql,
+            activate_subscription as activate_subscription_postgresql,
+            get_active_subscriptions as get_active_subscriptions_postgresql,
+            get_subscription_countries as get_subscription_countries_postgresql,
+            get_expired_soon_or_active_subscriptions as get_expired_soon_or_active_subscriptions_postgresql,
+            mark_subscription_expired as mark_subscription_expired_postgresql,
+            get_all_active_subscriptions_for_admin as get_all_active_subscriptions_for_admin_postgresql,
+            get_subscription_by_id as get_subscription_by_id_postgresql,
+            get_subscription_for_admin as get_subscription_for_admin_postgresql,
+            cancel_subscription_by_admin as cancel_subscription_by_admin_postgresql
+        )
+    except ImportError:
+        print("Warning: PostgreSQL module not found, falling back to SQLite")
+        USE_POSTGRESQL = False
 
 def init_db():
+    """Initialize database based on configuration."""
+    if USE_POSTGRESQL:
+        return init_postgresql_db()
+    else:
+        return init_sqlite_db()
+
+def init_sqlite_db():
+    """Initialize SQLite database."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     # Users table
@@ -45,6 +76,13 @@ def init_db():
     conn.close()
 
 def add_user_if_not_exists(user_id, username, first_name):
+    """Add a user if they don't already exist."""
+    if USE_POSTGRESQL:
+        return add_user_if_not_exists_postgresql(user_id, username, first_name)
+    else:
+        return add_user_if_not_exists_sqlite(user_id, username, first_name)
+
+def add_user_if_not_exists_sqlite(user_id, username, first_name):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
@@ -55,6 +93,13 @@ def add_user_if_not_exists(user_id, username, first_name):
     conn.close()
 
 def create_subscription_record(user_id, duration_plan_id, duration_days):
+    """Create a pending subscription record."""
+    if USE_POSTGRESQL:
+        return create_subscription_record_postgresql(user_id, duration_plan_id, duration_days)
+    else:
+        return create_subscription_record_sqlite(user_id, duration_plan_id, duration_days)
+
+def create_subscription_record_sqlite(user_id, duration_plan_id, duration_days):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     # Create a pending record, activation happens after payment
@@ -69,6 +114,12 @@ def create_subscription_record(user_id, duration_plan_id, duration_days):
 
 def update_subscription_country_package(subscription_id, country_package_id):
     """Update subscription with the selected country package."""
+    if USE_POSTGRESQL:
+        return update_subscription_country_package_postgresql(subscription_id, country_package_id)
+    else:
+        return update_subscription_country_package_sqlite(subscription_id, country_package_id)
+
+def update_subscription_country_package_sqlite(subscription_id, country_package_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -81,6 +132,12 @@ def update_subscription_country_package(subscription_id, country_package_id):
 
 def add_subscription_country(subscription_id, country_code, outline_key_id, outline_access_url):
     """Add a country to a subscription with its VPN key."""
+    if USE_POSTGRESQL:
+        return add_subscription_country_postgresql(subscription_id, country_code, outline_key_id, outline_access_url)
+    else:
+        return add_subscription_country_sqlite(subscription_id, country_code, outline_key_id, outline_access_url)
+
+def add_subscription_country_sqlite(subscription_id, country_code, outline_key_id, outline_access_url):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -91,6 +148,13 @@ def add_subscription_country(subscription_id, country_code, outline_key_id, outl
     conn.close()
 
 def activate_subscription(subscription_db_id, duration_days, payment_id="MANUAL_CRYPTO"):
+    """Activate a subscription with start and end dates."""
+    if USE_POSTGRESQL:
+        return activate_subscription_postgresql(subscription_db_id, duration_days, payment_id)
+    else:
+        return activate_subscription_sqlite(subscription_db_id, duration_days, payment_id)
+
+def activate_subscription_sqlite(subscription_db_id, duration_days, payment_id="MANUAL_CRYPTO"):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     start_date = datetime.datetime.utcnow()
@@ -105,6 +169,13 @@ def activate_subscription(subscription_db_id, duration_days, payment_id="MANUAL_
     print(f"Subscription {subscription_db_id} activated. Ends on {end_date}")
 
 def get_active_subscriptions(user_id):
+    """Get all active subscriptions for a user."""
+    if USE_POSTGRESQL:
+        return get_active_subscriptions_postgresql(user_id)
+    else:
+        return get_active_subscriptions_sqlite(user_id)
+
+def get_active_subscriptions_sqlite(user_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -123,6 +194,12 @@ def get_active_subscriptions(user_id):
 
 def get_subscription_countries(subscription_id):
     """Get all countries and their VPN keys for a specific subscription."""
+    if USE_POSTGRESQL:
+        return get_subscription_countries_postgresql(subscription_id)
+    else:
+        return get_subscription_countries_sqlite(subscription_id)
+
+def get_subscription_countries_sqlite(subscription_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -136,6 +213,12 @@ def get_subscription_countries(subscription_id):
 
 def get_expired_soon_or_active_subscriptions():
     """Gets subscriptions that are active or will expire soon (for checking)."""
+    if USE_POSTGRESQL:
+        return get_expired_soon_or_active_subscriptions_postgresql()
+    else:
+        return get_expired_soon_or_active_subscriptions_sqlite()
+
+def get_expired_soon_or_active_subscriptions_sqlite():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     # Check subscriptions that are active and their end_date is in the past
@@ -153,6 +236,13 @@ def get_expired_soon_or_active_subscriptions():
     return subs
 
 def mark_subscription_expired(subscription_id):
+    """Mark a subscription as expired."""
+    if USE_POSTGRESQL:
+        return mark_subscription_expired_postgresql(subscription_id)
+    else:
+        return mark_subscription_expired_sqlite(subscription_id)
+
+def mark_subscription_expired_sqlite(subscription_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("UPDATE subscriptions SET status = 'expired' WHERE id = ?", (subscription_id,))
@@ -160,14 +250,16 @@ def mark_subscription_expired(subscription_id):
     conn.close()
     print(f"Subscription {subscription_id} marked as expired in DB.")
 
-
-# admin 
 def get_all_active_subscriptions_for_admin():
     """Gets all active or recently expired subscriptions for admin view."""
+    if USE_POSTGRESQL:
+        return get_all_active_subscriptions_for_admin_postgresql()
+    else:
+        return get_all_active_subscriptions_for_admin_sqlite()
+
+def get_all_active_subscriptions_for_admin_sqlite():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    # Fetches active or pending ones, or recently expired ones for cleanup.
-    # You might want to filter by status more specifically.
     cursor.execute('''
         SELECT s.id, s.user_id, u.username, u.first_name, s.duration_plan_id, s.country_package_id, s.end_date, s.status,
                GROUP_CONCAT(sc.country_code) as countries
@@ -184,6 +276,12 @@ def get_all_active_subscriptions_for_admin():
 
 def get_subscription_by_id(subscription_id):
     """Get subscription details by ID."""
+    if USE_POSTGRESQL:
+        return get_subscription_by_id_postgresql(subscription_id)
+    else:
+        return get_subscription_by_id_sqlite(subscription_id)
+
+def get_subscription_by_id_sqlite(subscription_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -197,6 +295,12 @@ def get_subscription_by_id(subscription_id):
 
 def get_subscription_for_admin(subscription_id):
     """Get subscription details by ID in the format expected by admin functions."""
+    if USE_POSTGRESQL:
+        return get_subscription_for_admin_postgresql(subscription_id)
+    else:
+        return get_subscription_for_admin_sqlite(subscription_id)
+
+def get_subscription_for_admin_sqlite(subscription_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -213,6 +317,13 @@ def get_subscription_for_admin(subscription_id):
     return sub
 
 def cancel_subscription_by_admin(subscription_db_id):
+    """Cancel a subscription by admin."""
+    if USE_POSTGRESQL:
+        return cancel_subscription_by_admin_postgresql(subscription_db_id)
+    else:
+        return cancel_subscription_by_admin_sqlite(subscription_db_id)
+
+def cancel_subscription_by_admin_sqlite(subscription_db_id):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("UPDATE subscriptions SET status = 'cancelled_by_admin' WHERE id = ?", (subscription_db_id,))
@@ -221,7 +332,6 @@ def cancel_subscription_by_admin(subscription_db_id):
     conn.close()
     print(f"Subscription {subscription_db_id} marked as 'cancelled_by_admin' in DB.")
     return updated_rows > 0
-   
 
 if __name__ == '__main__':
     init_db() # Initialize DB when script is run directly

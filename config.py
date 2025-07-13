@@ -36,8 +36,26 @@ if os.getenv("OUTLINE_API_URL") and not OUTLINE_SERVERS["germany"]["api_url"]:
     OUTLINE_SERVERS["germany"]["api_url"] = os.getenv("OUTLINE_API_URL")
     OUTLINE_SERVERS["germany"]["cert_sha256"] = os.getenv("OUTLINE_CERT_SHA256", "")
 
-# Database file
-DB_PATH = "vpn_subscriptions.db"
+# Database configuration
+USE_POSTGRESQL = os.getenv("USE_POSTGRESQL", "true").lower() == "true"
+
+if USE_POSTGRESQL:
+    # PostgreSQL configuration
+    POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+    POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+    POSTGRES_DB = os.getenv("POSTGRES_DB", "vpn_bot")
+    POSTGRES_USER = os.getenv("POSTGRES_USER", "vpn_bot_user")
+    POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "")
+    
+    # Construct PostgreSQL connection string
+    POSTGRES_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+    
+    # For Render's internal PostgreSQL service
+    if os.getenv("DATABASE_URL"):
+        POSTGRES_URL = os.getenv("DATABASE_URL")
+else:
+    # SQLite configuration (fallback)
+    DB_PATH = "vpn_subscriptions.db"
 
 # Duration Plans (separate from country selection)
 DURATION_PLANS = {
