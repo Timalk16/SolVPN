@@ -177,6 +177,9 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user = update.effective_user
     add_user_if_not_exists(user.id, user.username, user.first_name)
     logger.info(f"[start_command] User {user.id} ({user.username or user.first_name}) started the bot.")
+    
+    # Clear any existing conversation state when used as fallback
+    context.user_data.clear()
 
     # Send logo image
     with open("assets/logo.jpeg", "rb") as img:
@@ -215,6 +218,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Send help information to the user."""
     user = update.effective_user
     
+    # Clear any existing conversation state when used as fallback
+    context.user_data.clear()
+    
     # Get testnet status
     testnet_status = get_testnet_status()
     testnet_notice = f"\n\n⚠️ *{testnet_status} Mode*" if testnet_status == "Testnet" else ""
@@ -240,6 +246,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user = update.effective_user
     logger.info(f"User {user.id} initiated /subscribe.")
+    
+    # Clear any existing conversation state to start fresh
+    context.user_data.clear()
+    
     reply_markup = build_duration_selection_keyboard()
     await update.message.reply_text("Пожалуйста, выберите срок подписки:", reply_markup=reply_markup)
     return UserConversationState.CHOOSE_DURATION.value
@@ -1167,7 +1177,12 @@ async def main() -> None:
                 CallbackQueryHandler(cancel_subscription_flow, pattern="^cancel_subscription_flow$")
             ]
         },
-        fallbacks=[CommandHandler("cancel", cancel_subscription_flow)],
+        fallbacks=[
+            CommandHandler("cancel", cancel_subscription_flow),
+            CommandHandler("subscribe", subscribe_command),  # Allow /subscribe to restart the conversation
+            CommandHandler("start", start_command),  # Allow /start to break out of conversation
+            CommandHandler("help", help_command),  # Allow /help to break out of conversation
+        ],
         per_user=True,
         per_chat=True,
         allow_reentry=True
