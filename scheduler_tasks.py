@@ -18,7 +18,11 @@ async def check_expired_subscriptions(context: ContextTypes.DEFAULT_TYPE):
 
     for sub in subscriptions_to_check:
         sub_id, user_id, status, end_date_str, key_ids, countries = sub
-        end_date = datetime.datetime.fromisoformat(end_date_str) # Ensure it's datetime
+        # Handle both string and datetime objects from different databases
+        if isinstance(end_date_str, str):
+            end_date = datetime.datetime.fromisoformat(end_date_str)
+        else:
+            end_date = end_date_str
 
         if status == 'active':
             # Check for expiration

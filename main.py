@@ -260,7 +260,12 @@ async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT
     for sub_id, duration_plan_id, country_package_id, end_date_str, status, countries, access_urls in active_subs:
         duration_plan_name = DURATION_PLANS.get(duration_plan_id, {}).get("name", "Неизвестный срок")
         country_package_name = COUNTRY_PACKAGES.get(country_package_id, {}).get("name", "Неизвестный пакет")
-        end_date = datetime.fromisoformat(end_date_str).strftime('%Y-%m-%d %H:%M UTC')
+        # Handle both string and datetime objects from different databases
+        if isinstance(end_date_str, str):
+            end_date = datetime.fromisoformat(end_date_str).strftime('%Y-%m-%d %H:%M UTC')
+        else:
+            # PostgreSQL returns datetime objects directly
+            end_date = end_date_str.strftime('%Y-%m-%d %H:%M UTC')
         
         # Parse countries and access URLs
         country_list = countries.split(',') if countries else []
@@ -470,7 +475,11 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         return ConversationHandler.END
 
                     # 0:id, 1:user_id, 2:duration_plan_id, 3:country_package_id, 4:start_date, 5:end_date
-                    current_end_date = datetime.fromisoformat(existing_sub[5])
+                    # Handle both string and datetime objects from different databases
+                    if isinstance(existing_sub[5], str):
+                        current_end_date = datetime.fromisoformat(existing_sub[5])
+                    else:
+                        current_end_date = existing_sub[5]
                     
                     # Calculate new end date by adding duration to the *current* end date
                     new_end_date = current_end_date + timedelta(days=plan['duration_days'])
@@ -1000,7 +1009,12 @@ async def menu_my_subscriptions_handler(update: Update, context: ContextTypes.DE
     for sub_id, duration_plan_id, country_package_id, end_date_str, status, countries, access_urls in active_subs:
         duration_plan_name = DURATION_PLANS.get(duration_plan_id, {}).get("name", "Неизвестный срок")
         country_package_name = COUNTRY_PACKAGES.get(country_package_id, {}).get("name", "Неизвестный пакет")
-        end_date = datetime.fromisoformat(end_date_str).strftime('%Y-%m-%d %H:%M UTC')
+        # Handle both string and datetime objects from different databases
+        if isinstance(end_date_str, str):
+            end_date = datetime.fromisoformat(end_date_str).strftime('%Y-%m-%d %H:%M UTC')
+        else:
+            # PostgreSQL returns datetime objects directly
+            end_date = end_date_str.strftime('%Y-%m-%d %H:%M UTC')
         country_list = countries.split(',') if countries else []
         access_url_list = access_urls.split(',') if access_urls else []
         message += f"**Срок:** {duration_plan_name}\n"
