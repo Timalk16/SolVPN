@@ -304,19 +304,21 @@ async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT
         message += f"**Пакет:** {country_package_name}\n"
         message += f"**Истекает:** {end_date}\n\n"
         
-        # Add VPN keys for each country
+        # Add VPN keys for each country with a clear label and instruction
         for i, country in enumerate(country_list):
             if i < len(access_url_list):
                 country_name = OUTLINE_SERVERS.get(country, {}).get('name', country.title())
                 country_flag = OUTLINE_SERVERS.get(country, {}).get('flag', '🌍')
-                message += f"{country_flag} **{country_name}:** `{access_url_list[i]}`\n"
-        
-        message += "\n"
+                message += (
+                    f"{country_flag} **{country_name}:**\n"
+                    f"🔑 Скопируйте этот ключ и импортируйте в Outline:\n"
+                    f"`{access_url_list[i]}`\n\n"
+                )
         
         # Add renew button for each subscription
         keyboard.append([InlineKeyboardButton(f"🔄 Продлить {duration_plan_name}", callback_data=f"renew_{sub_id}")])
     
-    message += "Вы можете скопировать ключи доступа и импортировать их в свой клиент Outline."
+    message += "\nℹ️ Чтобы скопировать ключ, нажмите и удерживайте его (или кликните ПКМ на компьютере). Затем вставьте ключ в приложение Outline."
     await update.message.reply_text(
         message, 
         parse_mode=ParseMode.MARKDOWN,
