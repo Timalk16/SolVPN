@@ -178,9 +178,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     add_user_if_not_exists(user.id, user.username, user.first_name)
     logger.info(f"[start_command] User {user.id} ({user.username or user.first_name}) started the bot.")
     
+    # If user was in a subscription flow, notify about cancellation
+    if any(k in context.user_data for k in [
+        'selected_duration', 'payment_id', 'pending_subscription_id', 'payment_type', 'country_package_id']):
+        await update.message.reply_text(
+            "Процесс подписки отменен. Используйте /subscribe, чтобы начать сначала."
+        )
     # Clear any existing conversation state when used as fallback
     context.user_data.clear()
-
+    
     # Send logo image
     with open("assets/logo.jpeg", "rb") as img:
         await update.message.reply_photo(photo=InputFile(img))
@@ -218,6 +224,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     """Send help information to the user."""
     user = update.effective_user
     
+    # If user was in a subscription flow, notify about cancellation
+    if any(k in context.user_data for k in [
+        'selected_duration', 'payment_id', 'pending_subscription_id', 'payment_type', 'country_package_id']):
+        await update.message.reply_text(
+            "Процесс подписки отменен. Используйте /subscribe, чтобы начать сначала."
+        )
     # Clear any existing conversation state when used as fallback
     context.user_data.clear()
     
@@ -247,6 +259,12 @@ async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     user = update.effective_user
     logger.info(f"User {user.id} initiated /subscribe.")
     
+    # If user was in a subscription flow, notify about cancellation
+    if any(k in context.user_data for k in [
+        'selected_duration', 'payment_id', 'pending_subscription_id', 'payment_type', 'country_package_id']):
+        await update.message.reply_text(
+            "Процесс подписки отменен. Используйте /subscribe, чтобы начать сначала."
+        )
     # Clear any existing conversation state to start fresh
     context.user_data.clear()
     
