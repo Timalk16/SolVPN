@@ -30,7 +30,7 @@ from database import (
     get_subscription_countries, update_subscription_country_package,
     # New DB functions for admin:
     get_all_active_subscriptions_for_admin, get_subscription_by_id, cancel_subscription_by_admin,
-    get_subscription_for_admin, mark_subscription_expired
+    get_subscription_for_admin, mark_subscription_expired, renew_subscription
 )
 from outline_utils import (
     get_outline_client, create_outline_key, rename_outline_key, delete_outline_key, get_available_countries
@@ -511,33 +511,22 @@ async def confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         current_end_date = datetime.fromisoformat(existing_sub[5])
                     else:
                         current_end_date = existing_sub[5]
-                    
                     # Calculate new end date by adding duration to the *current* end date
                     new_end_date = current_end_date + timedelta(days=plan['duration_days'])
 
-                    # Update existing subscription
-                    conn = sqlite3.connect(DB_PATH)
-                    cursor = conn.cursor()
-                    cursor.execute('''
-                        UPDATE subscriptions
-                        SET end_date = ?, status = 'active', payment_id = ?
-                        WHERE id = ? AND user_id = ?
-                    ''', (new_end_date, payment_id, renewing_sub_id, user_id))
-                    conn.commit()
-                    conn.close()
-                    
+                    # Update existing subscription using abstraction
+                    renew_subscription(renewing_sub_id, user_id, new_end_date, payment_id)
+
                     success_message = (
                         f"✅ Оплата прошла успешно! Ваша подписка была продлена.\n\n"
                         f"План: {plan['name']}\n"
                         f"Новая дата окончания: {new_end_date.strftime('%Y-%m-%d %H:%M')}\n\n"
                         f"Используйте /my_subscriptions, чтобы проверить статус вашей подписки."
                     )
-                    
+
                     await query.edit_message_text(
                         success_message,
-                        reply_markup=InlineKeyboardMarkup([[
-                            InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
-                        ]])
+                        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")]])
                     )
                     return ConversationHandler.END
                 else:
@@ -1683,33 +1672,22 @@ async def handle_global_subscription_callbacks(update: Update, context: ContextT
                             current_end_date = datetime.fromisoformat(existing_sub[5])
                         else:
                             current_end_date = existing_sub[5]
-                        
                         # Calculate new end date by adding duration to the *current* end date
                         new_end_date = current_end_date + timedelta(days=plan['duration_days'])
 
-                        # Update existing subscription
-                        conn = sqlite3.connect(DB_PATH)
-                        cursor = conn.cursor()
-                        cursor.execute('''
-                            UPDATE subscriptions
-                            SET end_date = ?, status = 'active', payment_id = ?
-                            WHERE id = ? AND user_id = ?
-                        ''', (new_end_date, payment_id, renewing_sub_id, user_id))
-                        conn.commit()
-                        conn.close()
-                        
+                        # Update existing subscription using abstraction
+                        renew_subscription(renewing_sub_id, user_id, new_end_date, payment_id)
+
                         success_message = (
                             f"✅ Оплата прошла успешно! Ваша подписка была продлена.\n\n"
                             f"План: {plan['name']}\n"
                             f"Новая дата окончания: {new_end_date.strftime('%Y-%m-%d %H:%M')}\n\n"
                             f"Используйте /my_subscriptions, чтобы проверить статус вашей подписки."
                         )
-                        
+
                         await query.edit_message_text(
                             success_message,
-                            reply_markup=InlineKeyboardMarkup([[
-                                InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
-                            ]])
+                            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")]])
                         )
                         return ConversationHandler.END
                     else:

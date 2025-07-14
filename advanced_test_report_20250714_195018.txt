@@ -1,0 +1,41 @@
+
+=== ADVANCED TELEGRAM BOT TEST REPORT ===
+Total Tests: 14
+Passed: 11
+Failed: 3
+Success Rate: 78.6%
+Total Duration: 4.12s
+Average Duration: 0.29s
+
+DETAILED RESULTS:
+✗ FAIL Start Command (0.27s)
+    Error: Start command failed
+
+✗ FAIL Help Command (0.10s)
+    Error: Help command failed
+
+✗ FAIL Basic Subscription Flow (0.19s)
+    Error: Subscribe command failed
+
+✓ PASS Crypto Subscription Flow (0.11s)
+
+✓ PASS Flow Interruption (0.23s)
+
+✓ PASS Command Interruptions (1.39s)
+
+✓ PASS Invalid Actions (0.00s)
+
+✓ PASS Admin Commands (0.37s)
+
+✓ PASS My Subscriptions (0.07s)
+
+✓ PASS Support Command (0.09s)
+
+✓ PASS Unknown Command (0.08s)
+
+✓ PASS Rate Limiting (0.99s)
+
+✓ PASS Payment Confirmation Flow (0.08s)
+
+✓ PASS Country Selection Flow (0.12s)
+

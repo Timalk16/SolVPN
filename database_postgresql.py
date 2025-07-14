@@ -240,6 +240,18 @@ def cancel_subscription_by_admin(subscription_db_id):
     print(f"Subscription {subscription_db_id} marked as 'cancelled_by_admin' in DB.")
     return updated_rows > 0
 
+def renew_subscription(subscription_id, user_id, new_end_date, payment_id):
+    """Renew a subscription by updating its end_date, status, and payment_id (PostgreSQL)."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE subscriptions
+        SET end_date = %s, status = 'active', payment_id = %s
+        WHERE id = %s AND user_id = %s
+    ''', (new_end_date, payment_id, subscription_id, user_id))
+    conn.commit()
+    conn.close()
+
 if __name__ == '__main__':
     init_db()  # Initialize DB when script is run directly
     print("PostgreSQL database initialized.") 

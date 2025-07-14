@@ -1,0 +1,100 @@
+[
+  {
+    "test_name": "Start Command",
+    "passed": false,
+    "error": "Start command failed",
+    "duration": 0.26798486709594727,
+    "details": {}
+  },
+  {
+    "test_name": "Help Command",
+    "passed": false,
+    "error": "Help command failed",
+    "duration": 0.1015470027923584,
+    "details": {}
+  },
+  {
+    "test_name": "Basic Subscription Flow",
+    "passed": false,
+    "error": "Subscribe command failed",
+    "duration": 0.19122886657714844,
+    "details": {}
+  },
+  {
+    "test_name": "Crypto Subscription Flow",
+    "passed": true,
+    "error": null,
+    "duration": 0.10955309867858887,
+    "details": {}
+  },
+  {
+    "test_name": "Flow Interruption",
+    "passed": true,
+    "error": null,
+    "duration": 0.23375630378723145,
+    "details": {}
+  },
+  {
+    "test_name": "Command Interruptions",
+    "passed": true,
+    "error": null,
+    "duration": 1.3939769268035889,
+    "details": {}
+  },
+  {
+    "test_name": "Invalid Actions",
+    "passed": true,
+    "error": null,
+    "duration": 0.0006992816925048828,
+    "details": {}
+  },
+  {
+    "test_name": "Admin Commands",
+    "passed": true,
+    "error": null,
+    "duration": 0.37195801734924316,
+    "details": {}
+  },
+  {
+    "test_name": "My Subscriptions",
+    "passed": true,
+    "error": null,
+    "duration": 0.07362484931945801,
+    "details": {}
+  },
+  {
+    "test_name": "Support Command",
+    "passed": true,
+    "error": null,
+    "duration": 0.09238505363464355,
+    "details": {}
+  },
+  {
+    "test_name": "Unknown Command",
+    "passed": true,
+    "error": null,
+    "duration": 0.07819819450378418,
+    "details": {}
+  },
+  {
+    "test_name": "Rate Limiting",
+    "passed": true,
+    "error": null,
+    "duration": 0.9948480129241943,
+    "details": {}
+  },
+  {
+    "test_name": "Payment Confirmation Flow",
+    "passed": true,
+    "error": null,
+    "duration": 0.08335709571838379,
+    "details": {}
+  },
+  {
+    "test_name": "Country Selection Flow",
+    "passed": true,
+    "error": null,
+    "duration": 0.12464189529418945,
+    "details": {}
+  }
+]

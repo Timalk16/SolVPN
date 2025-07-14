@@ -1,0 +1,100 @@
+[
+  {
+    "test_name": "Start Command",
+    "passed": true,
+    "error": null,
+    "duration": 2.2331581115722656,
+    "details": {}
+  },
+  {
+    "test_name": "Help Command",
+    "passed": true,
+    "error": null,
+    "duration": 2.0951850414276123,
+    "details": {}
+  },
+  {
+    "test_name": "Basic Subscription Flow",
+    "passed": true,
+    "error": null,
+    "duration": 8.135311126708984,
+    "details": {}
+  },
+  {
+    "test_name": "Crypto Subscription Flow",
+    "passed": true,
+    "error": null,
+    "duration": 8.244915962219238,
+    "details": {}
+  },
+  {
+    "test_name": "Flow Interruption",
+    "passed": true,
+    "error": null,
+    "duration": 8.45047402381897,
+    "details": {}
+  },
+  {
+    "test_name": "Command Interruptions",
+    "passed": true,
+    "error": null,
+    "duration": 13.05007290840149,
+    "details": {}
+  },
+  {
+    "test_name": "Invalid Actions",
+    "passed": true,
+    "error": null,
+    "duration": 6.005807161331177,
+    "details": {}
+  },
+  {
+    "test_name": "Admin Commands",
+    "passed": true,
+    "error": null,
+    "duration": 6.255908727645874,
+    "details": {}
+  },
+  {
+    "test_name": "My Subscriptions",
+    "passed": true,
+    "error": null,
+    "duration": 2.217594861984253,
+    "details": {}
+  },
+  {
+    "test_name": "Support Command",
+    "passed": true,
+    "error": null,
+    "duration": 2.102426290512085,
+    "details": {}
+  },
+  {
+    "test_name": "Unknown Command",
+    "passed": true,
+    "error": null,
+    "duration": 2.114501953125,
+    "details": {}
+  },
+  {
+    "test_name": "Rate Limiting",
+    "passed": true,
+    "error": null,
+    "duration": 11.296728134155273,
+    "details": {}
+  },
+  {
+    "test_name": "Payment Confirmation Flow",
+    "passed": true,
+    "error": null,
+    "duration": 8.182476997375488,
+    "details": {}
+  },
+  {
+    "test_name": "Country Selection Flow",
+    "passed": true,
+    "error": null,
+    "duration": 10.342250108718872,
+    "details": {}
+  }
+]

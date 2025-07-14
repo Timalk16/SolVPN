@@ -350,6 +350,24 @@ def cancel_subscription_by_admin_sqlite(subscription_db_id):
     print(f"Subscription {subscription_db_id} marked as 'cancelled_by_admin' in DB.")
     return updated_rows > 0
 
+def renew_subscription(subscription_id, user_id, new_end_date, payment_id):
+    """Renew a subscription by updating its end_date, status, and payment_id."""
+    if USE_POSTGRESQL and postgresql_functions:
+        return postgresql_functions['renew_subscription'](subscription_id, user_id, new_end_date, payment_id)
+    else:
+        return renew_subscription_sqlite(subscription_id, user_id, new_end_date, payment_id)
+
+def renew_subscription_sqlite(subscription_id, user_id, new_end_date, payment_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        UPDATE subscriptions
+        SET end_date = ?, status = 'active', payment_id = ?
+        WHERE id = ? AND user_id = ?
+    ''', (new_end_date, payment_id, subscription_id, user_id))
+    conn.commit()
+    conn.close()
+
 if __name__ == '__main__':
     init_db() # Initialize DB when script is run directly
     print("Database initialized.")
