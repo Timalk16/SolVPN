@@ -273,38 +273,21 @@ async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await update.message.reply_text("Пожалуйста, выберите срок подписки:", reply_markup=reply_markup)
     return UserConversationState.CHOOSE_DURATION.value
 
-@rate_limit_command("my_subscriptions")
-async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Show the user their active subscriptions."""
-    # TODO: While users can create new subscriptions, a direct "renew" option for an existing subscription would be more convenient.
-    user_id = update.effective_user.id
-    active_subs = get_active_subscriptions(user_id)
-    if not active_subs:
-        await update.message.reply_text("У вас нет активных подписок. Используйте /subscribe, чтобы приобрести одну!")
-        return
-
+def build_my_subscriptions_message_and_keyboard(active_subs):
     message = "Ваши активные подписки на VPN:\n\n"
     keyboard = []
-    
     for sub_id, duration_plan_id, country_package_id, end_date_str, status, countries, access_urls in active_subs:
         duration_plan_name = DURATION_PLANS.get(duration_plan_id, {}).get("name", "Неизвестный срок")
         country_package_name = COUNTRY_PACKAGES.get(country_package_id, {}).get("name", "Неизвестный пакет")
-        # Handle both string and datetime objects from different databases
         if isinstance(end_date_str, str):
             end_date = datetime.fromisoformat(end_date_str).strftime('%Y-%m-%d %H:%M UTC')
         else:
-            # PostgreSQL returns datetime objects directly
             end_date = end_date_str.strftime('%Y-%m-%d %H:%M UTC')
-        
-        # Parse countries and access URLs
         country_list = countries.split(',') if countries else []
         access_url_list = access_urls.split(',') if access_urls else []
-        
         message += f"**Срок:** {duration_plan_name}\n"
         message += f"**Пакет:** {country_package_name}\n"
         message += f"**Истекает:** {end_date}\n\n"
-        
-        # Add VPN keys for each country with a clear label and instruction
         for i, country in enumerate(country_list):
             if i < len(access_url_list):
                 country_name = OUTLINE_SERVERS.get(country, {}).get('name', country.title())
@@ -314,11 +297,18 @@ async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT
                     f"🔑 Скопируйте этот ключ и импортируйте в Outline:\n"
                     f"`{access_url_list[i]}`\n\n"
                 )
-        
-        # Add renew button for each subscription
         keyboard.append([InlineKeyboardButton(f"🔄 Продлить {duration_plan_name}", callback_data=f"renew_{sub_id}")])
-    
     message += "\nℹ️ Чтобы скопировать ключ, нажмите и удерживайте его (или кликните ПКМ на компьютере). Затем вставьте ключ в приложение Outline."
+    return message, keyboard
+
+@rate_limit_command("my_subscriptions")
+async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_id = update.effective_user.id
+    active_subs = get_active_subscriptions(user_id)
+    if not active_subs:
+        await update.message.reply_text("У вас нет активных подписок. Используйте /subscribe, чтобы приобрести одну!")
+        return
+    message, keyboard = build_my_subscriptions_message_and_keyboard(active_subs)
     await update.message.reply_text(
         message, 
         parse_mode=ParseMode.MARKDOWN,
@@ -1022,37 +1012,13 @@ async def menu_subscribe_handler(update: Update, context: ContextTypes.DEFAULT_T
 async def menu_my_subscriptions_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    # Simulate /my_subscriptions command for callback context
     user_id = query.from_user.id
     chat_id = query.message.chat_id
     active_subs = get_active_subscriptions(user_id)
     if not active_subs:
         await context.bot.send_message(chat_id=chat_id, text="У вас нет активных подписок. Используйте /subscribe, чтобы приобрести одну!")
         return
-    message = "Ваши активные подписки на VPN:\n\n"
-    keyboard = []
-    for sub_id, duration_plan_id, country_package_id, end_date_str, status, countries, access_urls in active_subs:
-        duration_plan_name = DURATION_PLANS.get(duration_plan_id, {}).get("name", "Неизвестный срок")
-        country_package_name = COUNTRY_PACKAGES.get(country_package_id, {}).get("name", "Неизвестный пакет")
-        # Handle both string and datetime objects from different databases
-        if isinstance(end_date_str, str):
-            end_date = datetime.fromisoformat(end_date_str).strftime('%Y-%m-%d %H:%M UTC')
-        else:
-            # PostgreSQL returns datetime objects directly
-            end_date = end_date_str.strftime('%Y-%m-%d %H:%M UTC')
-        country_list = countries.split(',') if countries else []
-        access_url_list = access_urls.split(',') if access_urls else []
-        message += f"**Срок:** {duration_plan_name}\n"
-        message += f"**Пакет:** {country_package_name}\n"
-        message += f"**Истекает:** {end_date}\n\n"
-        for i, country in enumerate(country_list):
-            if i < len(access_url_list):
-                country_name = OUTLINE_SERVERS.get(country, {}).get('name', country.title())
-                country_flag = OUTLINE_SERVERS.get(country, {}).get('flag', '🌍')
-                message += f"{country_flag} **{country_name}:** `{access_url_list[i]}`\n"
-        message += "\n"
-        keyboard.append([InlineKeyboardButton(f"🔄 Продлить {duration_plan_name}", callback_data=f"renew_{sub_id}")])
-    message += "Вы можете скопировать ключи доступа и импортировать их в свой клиент Outline."
+    message, keyboard = build_my_subscriptions_message_and_keyboard(active_subs)
     await context.bot.send_message(
         chat_id=chat_id,
         text=message,
