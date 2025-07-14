@@ -1240,6 +1240,9 @@ async def main() -> None:
     application.add_handler(CommandHandler("my_subscriptions", my_subscriptions_command))
     application.add_handler(CommandHandler("support", support_command))
     
+    # Add global callback query handler for subscription flow buttons that might be from old messages
+    application.add_handler(CallbackQueryHandler(handle_global_subscription_callbacks, pattern=r"^(duration_|pay_|confirm_payment|back_to_duration|cancel_subscription_flow|countries_)"))
+    
     # Add handlers for buttons outside conversation flow
     application.add_handler(CallbackQueryHandler(back_to_menu_handler, pattern="^back_to_menu$"))
     application.add_handler(CallbackQueryHandler(handle_cancel_expired, pattern=r"^cancel_expired_\d+$"))
@@ -1376,6 +1379,392 @@ async def handle_cancel_expired(update: Update, context: ContextTypes.DEFAULT_TY
     )
     
     return ConversationHandler.END
+
+async def handle_global_subscription_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Handles callback queries that might be from old messages or direct button presses.
+    This is a catch-all handler to ensure all subscription flow buttons work regardless of conversation state.
+    """
+    query = update.callback_query
+    await query.answer()
+
+    if query.data.startswith("duration_"):
+        duration_id = query.data[len("duration_"):]
+        context.user_data['selected_duration'] = duration_id
+        logger.info(f"User {update.effective_user.id} selected duration: {duration_id}")
+        plan_details = DURATION_PLANS[duration_id]
+        text = (
+            f"Вы выбрали: {plan_details['name']}\n"
+            f"Цена: {plan_details['price_rub']:.0f} ₽.\n\n"
+            "Пожалуйста, выберите способ оплаты:"
+        )
+        reply_markup = build_payment_method_keyboard(duration_id)
+        await query.edit_message_text(text=text, reply_markup=reply_markup)
+        return UserConversationState.CHOOSE_PAYMENT.value
+
+    elif query.data.startswith("pay_"):
+        duration_id = context.user_data.get('selected_duration')
+        if not duration_id:
+            await query.edit_message_text("Ошибка: Срок не выбран. Пожалуйста, начните сначала с /subscribe")
+            return ConversationHandler.END
+        
+        plan = DURATION_PLANS[duration_id]
+        
+        if query.data == "pay_crypto":
+            try:
+                # Generate crypto payment details
+                instructions, invoice_id = await get_crypto_payment_details(
+                    plan['price_usdt'],
+                    plan['name']
+                )
+                
+                context.user_data['payment_id'] = invoice_id
+                context.user_data['payment_type'] = 'crypto'
+                
+                keyboard = [
+                    [InlineKeyboardButton("✅ Я оплатил", callback_data="confirm_payment")],
+                    [InlineKeyboardButton("❌ Отмена", callback_data="cancel_subscription_flow")]
+                ]
+                
+                await query.edit_message_text(
+                    instructions,
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                
+            except Exception as e:
+                logger.error(f"Error creating crypto payment: {e}")
+                await query.edit_message_text(
+                    "Извините, произошла ошибка при создании платежа. Пожалуйста, попробуйте позже.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("⬅️ Назад к выбору срока", callback_data="back_to_duration")
+                    ]])
+                )
+                return UserConversationState.CHOOSE_DURATION.value
+        
+        elif query.data == "pay_card":
+            try:
+                # Generate Youkassa payment details
+                instructions, payment_id = await get_yookassa_payment_details(
+                    plan['price_rub'],
+                    plan['name']
+                )
+
+                # Try to extract the payment link from the instructions (fallback for old API)
+                import re
+                url_match = re.search(r'(https?://\S+)', instructions)
+                confirmation_url = url_match.group(1) if url_match else None
+
+                # Remove the raw link from the instructions if present
+                if confirmation_url:
+                    instructions = instructions.replace(f"Ссылка для оплаты: {confirmation_url}", "")
+
+                context.user_data['payment_id'] = payment_id
+                context.user_data['payment_type'] = 'card'
+
+                keyboard = []
+                if confirmation_url:
+                    keyboard.append([InlineKeyboardButton("💳 Оплатить через Youkassa", url=confirmation_url)])
+                keyboard.append([InlineKeyboardButton("✅ Я оплатил", callback_data="confirm_payment")])
+                keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_subscription_flow")])
+
+                await query.edit_message_text(
+                    instructions.strip(),
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode=ParseMode.MARKDOWN
+                )
+
+            except Exception as e:
+                logger.error(f"Error creating card payment: {e}")
+                
+                # Check if it's a configuration error
+                if "Youkassa is not configured" in str(e):
+                    error_message = (
+                        "💳 Оплата картой временно недоступна.\n\n"
+                        "Пожалуйста, используйте оплату криптовалютой или обратитесь к администратору."
+                    )
+                elif "network" in str(e).lower() or "timeout" in str(e).lower() or "connection" in str(e).lower():
+                    error_message = (
+                        "💳 Ошибка сети при создании платежа.\n\n"
+                        "Пожалуйста, попробуйте еще раз через несколько минут или используйте оплату криптовалютой."
+                    )
+                else:
+                    error_message = "Извините, произошла ошибка при создании платежа. Пожалуйста, попробуйте позже."
+                
+                await query.edit_message_text(
+                    error_message,
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("⬅️ Назад к выбору срока", callback_data="back_to_duration")
+                    ]])
+                )
+                return UserConversationState.CHOOSE_DURATION.value
+        
+        return UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value
+
+    elif query.data == "back_to_duration":
+        duration_id = context.user_data.get('selected_duration')
+        if not duration_id:
+            await query.edit_message_text("Ошибка: Срок не выбран. Пожалуйста, начните сначала с /subscribe")
+            return ConversationHandler.END
+        
+        plan_details = DURATION_PLANS[duration_id]
+        text = (
+            f"Вы выбрали: {plan_details['name']}\n"
+            f"Цена: {plan_details['price_usdt']:.2f} USDT.\n\n"
+            "Пожалуйста, выберите способ оплаты:"
+        )
+        reply_markup = build_payment_method_keyboard(duration_id)
+        await query.edit_message_text(text=text, reply_markup=reply_markup)
+        return UserConversationState.CHOOSE_PAYMENT.value
+
+    elif query.data == "cancel_subscription_flow":
+        await query.edit_message_text(
+            "Процесс подписки отменен. Используйте /subscribe, чтобы начать сначала.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
+            ]])
+        )
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    elif query.data.startswith("countries_"):
+        country_package_id = query.data[len("countries_"):]
+        subscription_id = context.user_data.get('pending_subscription_id')
+        payment_id = context.user_data.get('payment_id')
+        duration_id = context.user_data.get('selected_duration')
+        
+        if not subscription_id or not payment_id or not duration_id:
+            await query.edit_message_text(
+                "❌ Ошибка: Отсутствует информация о подписке. Пожалуйста, начните сначала с /subscribe",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
+                ]])
+            )
+            return ConversationHandler.END
+        
+        try:
+            # Get package details
+            package = COUNTRY_PACKAGES[country_package_id]
+            duration_plan = DURATION_PLANS[duration_id]
+            
+            # Update subscription with country package
+            update_subscription_country_package(subscription_id, country_package_id)
+            
+            # Create Outline keys for each country in the package
+            countries = package.get('countries', [])
+            created_keys = []
+            
+            for country in countries:
+                try:
+                    # Get Outline client for this country
+                    outline_client = get_outline_client(country)
+                    if not outline_client:
+                        logger.error(f"Failed to get Outline client for country: {country}")
+                        continue
+                    
+                    # Create VPN key for this country
+                    outline_key_id, outline_access_url = create_outline_key(outline_client)
+                    
+                    if outline_key_id and outline_access_url:
+                        # Add country to subscription
+                        add_subscription_country(
+                            subscription_id=subscription_id,
+                            country_code=country,
+                            outline_key_id=outline_key_id,
+                            outline_access_url=outline_access_url
+                        )
+                        created_keys.append(country)
+                        
+                        # Rename the key for better identification
+                        user_name = update.effective_user.first_name or update.effective_user.username or f"user_{update.effective_user.id}"
+                        key_name = f"{user_name}_{country}_{subscription_id}"
+                        rename_outline_key(outline_client, outline_key_id, key_name)
+                        
+                        logger.info(f"Created VPN key for {country}: {outline_key_id}")
+                    else:
+                        logger.error(f"Failed to create Outline key for country: {country}")
+                        
+                except Exception as e:
+                    logger.error(f"Error creating VPN key for {country}: {e}")
+            
+            if not created_keys:
+                raise Exception("Failed to create any VPN keys")
+            
+            # Activate the subscription
+            activate_subscription(
+                subscription_db_id=subscription_id,
+                duration_days=duration_plan['duration_days'],
+                payment_id=payment_id
+            )
+            
+            countries_text = ", ".join([f"{OUTLINE_SERVERS[country]['flag']} {OUTLINE_SERVERS[country]['name']}" 
+                                      for country in created_keys])
+            
+            success_message = (
+                f"🎉 Ваша VPN подписка теперь активна!\n\n"
+                f"Срок: {duration_plan['name']}\n"
+                f"Пакет: {package['name']}\n"
+                f"Страны: {countries_text}\n"
+                f"Истекает: {(datetime.now() + timedelta(days=duration_plan['duration_days'])).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                f"Используйте /my_subscriptions, чтобы получить ваши ключи доступа к VPN."
+            )
+            
+            await query.edit_message_text(
+                success_message,
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
+                ]])
+            )
+            
+            # Clear user data
+            context.user_data.clear()
+            return ConversationHandler.END
+            
+        except Exception as e:
+            logger.error(f"Error activating subscription: {e}")
+            await query.edit_message_text(
+                "❌ Произошла ошибка при активации вашей подписки. Пожалуйста, обратитесь в поддержку.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
+                ]])
+            )
+            return ConversationHandler.END
+
+    elif query.data == "confirm_payment":
+        payment_id = context.user_data.get('payment_id')
+        payment_type = context.user_data.get('payment_type')
+        
+        if not payment_id or not payment_type:
+            await query.edit_message_text(
+                "❌ Ошибка: Платежная информация не найдена. Пожалуйста, начните сначала с /subscribe",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
+                ]])
+            )
+            return ConversationHandler.END
+        
+        try:
+            # First check payment status
+            if payment_type == 'crypto':
+                status = await get_payment_status(payment_id)
+                logger.info(f"Crypto payment status check result: {status}")
+            else:  # card payment
+                status = await get_yookassa_payment_status(payment_id)
+                logger.info(f"Card payment status check result: {status}")
+            
+            if status == "paid" or status == "succeeded":
+                # Verify the payment
+                if payment_type == 'crypto':
+                    is_verified = await verify_crypto_payment(payment_id)
+                    logger.info(f"Crypto payment verification result: {is_verified}")
+                else:  # card payment
+                    is_verified = await verify_yookassa_payment(payment_id)
+                    logger.info(f"Card payment verification result: {is_verified}")
+                
+                if is_verified:
+                    # Create subscription
+                    user_id = update.effective_user.id
+                    duration_id = context.user_data.get('selected_duration')
+                    plan = DURATION_PLANS[duration_id]
+                    
+                    # Check if this is a renewal
+                    renewing_sub_id = context.user_data.get('renewing_sub_id')
+                    
+                    if renewing_sub_id:
+                        # This is a renewal - get existing subscription to find current end_date
+                        existing_sub = get_subscription_by_id(renewing_sub_id)
+                        if not existing_sub:
+                            await query.edit_message_text("Ошибка: Не удалось найти подписку для продления.")
+                            return ConversationHandler.END
+
+                        # 0:id, 1:user_id, 2:duration_plan_id, 3:country_package_id, 4:start_date, 5:end_date
+                        # Handle both string and datetime objects from different databases
+                        if isinstance(existing_sub[5], str):
+                            current_end_date = datetime.fromisoformat(existing_sub[5])
+                        else:
+                            current_end_date = existing_sub[5]
+                        
+                        # Calculate new end date by adding duration to the *current* end date
+                        new_end_date = current_end_date + timedelta(days=plan['duration_days'])
+
+                        # Update existing subscription
+                        conn = sqlite3.connect(DB_PATH)
+                        cursor = conn.cursor()
+                        cursor.execute('''
+                            UPDATE subscriptions
+                            SET end_date = ?, status = 'active', payment_id = ?
+                            WHERE id = ? AND user_id = ?
+                        ''', (new_end_date, payment_id, renewing_sub_id, user_id))
+                        conn.commit()
+                        conn.close()
+                        
+                        success_message = (
+                            f"✅ Оплата прошла успешно! Ваша подписка была продлена.\n\n"
+                            f"План: {plan['name']}\n"
+                            f"Новая дата окончания: {new_end_date.strftime('%Y-%m-%d %H:%M')}\n\n"
+                            f"Используйте /my_subscriptions, чтобы проверить статус вашей подписки."
+                        )
+                        
+                        await query.edit_message_text(
+                            success_message,
+                            reply_markup=InlineKeyboardMarkup([[
+                                InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
+                            ]])
+                        )
+                        return ConversationHandler.END
+                    else:
+                        # This is a new subscription - create pending subscription
+                        subscription_id = create_subscription_record(
+                            user_id=user_id,
+                            duration_plan_id=duration_id,
+                            duration_days=plan['duration_days']
+                        )
+                        
+                        # Store subscription ID for country selection
+                        context.user_data['pending_subscription_id'] = subscription_id
+                        context.user_data['payment_id'] = payment_id
+                        
+                        # Move to country selection
+                        price_text = f"{plan['price_usdt']:.2f} USDT" if payment_type == 'crypto' else f"{plan['price_rub']:.0f} ₽"
+                        text = (
+                            f"✅ Оплата прошла успешно!\n\n"
+                            f"Срок: {plan['name']}\n"
+                            f"Цена: {price_text}\n\n"
+                            f"Теперь выберите пакет стран:"
+                        )
+                        reply_markup = build_country_selection_keyboard()
+                        await query.edit_message_text(text=text, reply_markup=reply_markup)
+                        return UserConversationState.CHOOSE_COUNTRIES.value
+                else:
+                    await query.edit_message_text(
+                        "❌ Проверка платежа не удалась. Пожалуйста, попробуйте еще раз или обратитесь в поддержку.",
+                        reply_markup=InlineKeyboardMarkup([[
+                            InlineKeyboardButton("🔄 Проверить еще раз", callback_data="confirm_payment"),
+                            InlineKeyboardButton("❌ Отмена", callback_data="cancel_subscription_flow")
+                        ]])
+                    )
+                    return UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value
+            elif status == "not_found":
+                await query.edit_message_text(
+                    "❌ Платеж не найден. Убедитесь, что вы отправили платеж, и попробуйте снова.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("🔄 Проверить еще раз", callback_data="confirm_payment"),
+                        InlineKeyboardButton("❌ Отмена", callback_data="cancel_subscription_flow")
+                    ]])
+                )
+                return UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value
+        except Exception as e:
+            logger.error(f"Error processing payment: {e}")
+            await query.edit_message_text(
+                "❌ Произошла ошибка при обработке вашего платежа. Пожалуйста, попробуйте еще раз или обратитесь в поддержку.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔄 Попробовать еще раз", callback_data="confirm_payment"),
+                    InlineKeyboardButton("❌ Отмена", callback_data="cancel_subscription_flow")
+                ]])
+            )
+            return UserConversationState.AWAIT_PAYMENT_CONFIRMATION.value
+
+    return ConversationHandler.END # Should not reach here for valid callbacks
 
 def escape_markdown_v2(text: str) -> str:
     """Escape special characters for Telegram Markdown V2 format."""
