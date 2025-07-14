@@ -36,7 +36,8 @@ if USE_POSTGRESQL:
             'get_all_active_subscriptions_for_admin': get_all_active_subscriptions_for_admin_postgresql,
             'get_subscription_by_id': get_subscription_by_id_postgresql,
             'get_subscription_for_admin': get_subscription_for_admin_postgresql,
-            'cancel_subscription_by_admin': cancel_subscription_by_admin_postgresql
+            'cancel_subscription_by_admin': cancel_subscription_by_admin_postgresql,
+            'renew_subscription': renew_subscription  # <-- Add this line
         }
     except ImportError as e:
         print(f"Warning: PostgreSQL module not found ({e}), falling back to SQLite")

@@ -1,21 +1,62 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.5, pytest-7.4.0, pluggy-1.0.0
+rootdir: /Users/timofeymalakancikov/Desktop/vpn_bot
+plugins: anyio-3.5.0
+collected 10 items / 5 errors
 
-=== TELEGRAM BOT TEST REPORT ===
-Total Tests: 12
-Passed: 12
-Failed: 0
-Success Rate: 100.0%
-Total Duration: 64.18s
-
-DETAILED RESULTS:
-✓ PASS Start Command (2.22s)
-✓ PASS Help Command (2.15s)
-✓ PASS Basic Subscription Flow (8.14s)
-✓ PASS Crypto Subscription Flow (8.24s)
-✓ PASS Flow Interruption (8.34s)
-✓ PASS Command Interruptions (12.78s)
-✓ PASS Invalid Actions (6.00s)
-✓ PASS Admin Commands (6.23s)
-✓ PASS My Subscriptions (2.27s)
-✓ PASS Support Command (2.22s)
-✓ PASS Unknown Command (2.20s)
-✓ PASS Rate Limiting (3.38s)
+==================================== ERRORS ====================================
+_________________________ ERROR collecting test_app.py _________________________
+ImportError while importing test module '/Users/timofeymalakancikov/Desktop/vpn_bot/test_app.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../anaconda3/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+test_app.py:9: in <module>
+    from telegram import Update
+E   ModuleNotFoundError: No module named 'telegram'
+_________________________ ERROR collecting test_bot.py _________________________
+ImportError while importing test module '/Users/timofeymalakancikov/Desktop/vpn_bot/test_bot.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../anaconda3/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+test_bot.py:7: in <module>
+    from telegram import Bot
+E   ModuleNotFoundError: No module named 'telegram'
+______________________ ERROR collecting test_bot_flows.py ______________________
+ImportError while importing test module '/Users/timofeymalakancikov/Desktop/vpn_bot/test_bot_flows.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../anaconda3/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+test_bot_flows.py:12: in <module>
+    from telegram import Bot, Update, InlineKeyboardButton, InlineKeyboardMarkup
+E   ModuleNotFoundError: No module named 'telegram'
+________________ ERROR collecting test_conversation_fallback.py ________________
+ImportError while importing test module '/Users/timofeymalakancikov/Desktop/vpn_bot/test_conversation_fallback.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../anaconda3/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+test_conversation_fallback.py:10: in <module>
+    from telegram import Update, User, Message, Chat, CallbackQuery
+E   ModuleNotFoundError: No module named 'telegram'
+______________________ ERROR collecting test_handlers.py _______________________
+ImportError while importing test module '/Users/timofeymalakancikov/Desktop/vpn_bot/test_handlers.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+../../anaconda3/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+test_handlers.py:13: in <module>
+    from main import (
+main.py:12: in <module>
+    from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, BotCommandScopeChat, InputFile
+E   ModuleNotFoundError: No module named 'telegram'
+=========================== short test summary info ============================
+ERROR test_app.py
+ERROR test_bot.py
+ERROR test_bot_flows.py
+ERROR test_conversation_fallback.py
+ERROR test_handlers.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 5 errors during collection !!!!!!!!!!!!!!!!!!!!
+============================== 5 errors in 0.24s ===============================
