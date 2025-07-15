@@ -62,20 +62,20 @@ DURATION_PLANS = {
     "1_month": {
         "name": "Подписка на 1 месяц",
         "duration_days": 30,
-        "price_usdt": 0.10,
-        "price_rub": 10.00
+        "price_usdt": 2.00,
+        "price_rub": 159.00
     },
     "3_months": {
         "name": "Подписка на 3 месяца",
         "duration_days": 90,
-        "price_usdt": 12.00,
-        "price_rub": 1200.00
+        "price_usdt": 6.00,
+        "price_rub": 450.00
     },
     "12_months": {
         "name": "Подписка на 12 месяцев",
         "duration_days": 365,
-        "price_usdt": 40.00,
-        "price_rub": 4000.00
+        "price_usdt": 23.00,
+        "price_rub": 1850.00
     }
 }
 
