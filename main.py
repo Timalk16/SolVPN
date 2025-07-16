@@ -215,6 +215,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         [InlineKeyboardButton("🟢 Подписаться", callback_data="menu_subscribe")],
         [InlineKeyboardButton("📋 Мои подписки", callback_data="menu_my_subscriptions")],
         [InlineKeyboardButton("❓ Помощь", callback_data="menu_help")],
+        [InlineKeyboardButton("📖 Инструкция", callback_data="menu_instruction")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -1099,6 +1100,7 @@ async def post_init(application: Application) -> None:
         BotCommand("subscribe", "Покупка/продление доступа"),
         BotCommand("my_subscriptions", "Мои подписки"),
         BotCommand("help", "Помощь"),
+        BotCommand("instruction", "Инструкция по подключению"),
     ]
     await application.bot.set_my_commands(user_commands)
     logger.info("Set user commands.")
@@ -1719,6 +1721,165 @@ def escape_markdown_v2(text: str) -> str:
         text = text.replace(char, f'\\{char}')
     
     return text
+
+# --- Instruction Command and Menu Button ---
+INSTRUCTION_PLATFORMS = [
+    ("ios", "iOS"),
+    ("android", "Android"),
+    ("windows", "Windows"),
+    ("mac", "MacOS"),
+    ("linux", "Linux"),
+]
+INSTRUCTION_OUTLINE_LINKS = {
+    "ios": "https://apps.apple.com/app/outline-app/id1356177741",
+    "android": "https://play.google.com/store/apps/details?id=org.outline.android.client",
+    "windows": "https://s3.amazonaws.com/outline-releases/client/windows/stable/Outline-Client.exe",
+    "mac": "https://itunes.apple.com/app/outline-app/id1356178125?mt=12",
+    "linux": "https://s3.amazonaws.com/outline-releases/client/linux/stable/Outline-Client.AppImage",
+}
+INSTRUCTION_NAMES = {
+    "ios": "Инструкция для iOS:",
+    "android": "Инструкция для Android:",
+    "windows": "Инструкция для Windows:",
+    "mac": "Инструкция для MacOS:",
+    "linux": "Инструкция для Linux:",
+}
+
+INSTRUCTION_TEXTS = {
+    "ios": (
+        "1️⃣ Нажмите на ключ доступа (выше ⬆️ начинается с ss://)\n"
+        "2️⃣ Скачайте и установите приложение: [Outline для iOS]({link})\n"
+        "3️⃣ Откройте приложение и вставьте ключ\n"
+        "4️⃣ Нажмите 'Подключиться' и наслаждайтесь VPN! 😉"
+    ),
+    "android": (
+        "1️⃣ Нажмите на ключ доступа (выше ⬆️ начинается с ss://)\n"
+        "2️⃣ Скачайте и установите приложение: [Outline для Android]({link})\n"
+        "3️⃣ Откройте приложение и вставьте ключ\n"
+        "4️⃣ Нажмите 'Подключиться' и наслаждайтесь VPN! 😉"
+    ),
+    "windows": (
+        "1️⃣ Нажмите на ключ доступа (выше ⬆️ начинается с ss://)\n"
+        "2️⃣ Скачайте и установите приложение: [Outline для Windows]({link})\n"
+        "3️⃣ Откройте программу и вставьте ключ\n"
+        "4️⃣ Нажмите 'Подключиться' и наслаждайтесь VPN! 😉"
+    ),
+    "mac": (
+        "1️⃣ Нажмите на ключ доступа (выше ⬆️ начинается с ss://)\n"
+        "2️⃣ Скачайте и установите приложение: [Outline для MacOS]({link})\n"
+        "3️⃣ Запустите программу и вставьте ключ\n"
+        "4️⃣ Нажмите 'Подключиться' и наслаждайтесь высокой скоростью и стабильностью 😉"
+    ),
+    "linux": (
+        "1️⃣ Нажмите на ключ доступа (выше ⬆️ начинается с ss://)\n"
+        "2️⃣ Скачайте и установите приложение: [Outline для Linux]({link})\n"
+        "3️⃣ Откройте программу и вставьте ключ\n"
+        "4️⃣ Нажмите 'Подключиться' и наслаждайтесь VPN! 😉"
+    ),
+}
+
+from telegram.ext import ConversationHandler
+INSTRUCTION_CHOOSE_PLATFORM = 1001
+
+@rate_limit_command("instruction")
+async def instruction_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Start the instruction flow: ask user to choose platform."""
+    keyboard = [
+        [InlineKeyboardButton(name, callback_data=f"instruction_platform_{code}")]
+        for code, name in INSTRUCTION_PLATFORMS
+    ]
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="instruction_cancel")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "Пожалуйста, выберите ваше устройство:",
+        reply_markup=reply_markup
+    )
+    return INSTRUCTION_CHOOSE_PLATFORM
+
+async def instruction_platform_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "instruction_cancel":
+        await query.edit_message_text("Инструкция отменена.")
+        return ConversationHandler.END
+    platform = data.replace("instruction_platform_", "")
+    name = INSTRUCTION_NAMES.get(platform, "Инструкция:")
+    link = INSTRUCTION_OUTLINE_LINKS.get(platform, "https://getoutline.org/ru/get-started/" )
+    text = INSTRUCTION_TEXTS.get(platform, "")
+    if text:
+        text = text.format(link=link)
+    else:
+        text = f"Инструкция для {platform.title()} недоступна."
+    await query.edit_message_text(
+        f"{name}\n\n{text}",
+        parse_mode=ParseMode.MARKDOWN,
+        disable_web_page_preview=False,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")]])
+    )
+    return ConversationHandler.END
+
+# Add to main menu
+# --- Update start_command to add instruction button ---
+# Find the menu keyboard and add the instruction button
+# ... existing code ...
+    keyboard = [
+        [InlineKeyboardButton("🟢 Подписаться", callback_data="menu_subscribe")],
+        [InlineKeyboardButton("📋 Мои подписки", callback_data="menu_my_subscriptions")],
+        [InlineKeyboardButton("❓ Помощь", callback_data="menu_help")],
+        [InlineKeyboardButton("📖 Инструкция", callback_data="menu_instruction")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+// ... existing code ...
+# --- Main Menu Button Handlers ---
+async def menu_instruction_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton(name, callback_data=f"instruction_platform_{code}")]
+        for code, name in INSTRUCTION_PLATFORMS
+    ]
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="instruction_cancel")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text="Пожалуйста, выберите ваше устройство:",
+        reply_markup=reply_markup
+    )
+    return INSTRUCTION_CHOOSE_PLATFORM
+// ... existing code ...
+# --- Add to handlers and commands ---
+# In main(), add the new command and handlers
+// ... existing code ...
+    instruction_conv_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler("instruction", instruction_command),
+            CallbackQueryHandler(menu_instruction_handler, pattern="^menu_instruction$")
+        ],
+        states={
+            INSTRUCTION_CHOOSE_PLATFORM: [
+                CallbackQueryHandler(instruction_platform_chosen, pattern=r"^instruction_platform_"),
+                CallbackQueryHandler(instruction_platform_chosen, pattern="^instruction_cancel$")
+            ]
+        },
+        fallbacks=[
+            CommandHandler("cancel", back_to_menu_handler),
+            CallbackQueryHandler(back_to_menu_handler, pattern="^back_to_menu$")
+        ],
+        per_user=True,
+        per_chat=True,
+        allow_reentry=True
+    )
+    application.add_handler(instruction_conv_handler)
+// ... existing code ...
+    user_commands = [
+        BotCommand("start", "Главное меню"),
+        BotCommand("subscribe", "Покупка/продление доступа"),
+        BotCommand("my_subscriptions", "Мои подписки"),
+        BotCommand("help", "Помощь"),
+        BotCommand("instruction", "Инструкция по подключению"),
+    ]
+// ... existing code ...
 
 if __name__ == "__main__":
     try:
