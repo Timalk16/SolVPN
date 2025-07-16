@@ -1832,7 +1832,7 @@ async def instruction_platform_chosen(update: Update, context: ContextTypes.DEFA
         link = INSTRUCTION_LINKS.get(platform)
         if text_template and link:
             text = text_template.format(link=link)
-            # Escape for MarkdownV2 and avoid link preview
+            text = escape_markdown_v2(text)
             await query.edit_message_text(
                 text,
                 parse_mode=ParseMode.MARKDOWN_V2,
