@@ -1203,6 +1203,7 @@ async def main() -> None:
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("my_subscriptions", my_subscriptions_command))
+    application.add_handler(CommandHandler("instruction", instruction_command))
     application.add_handler(CommandHandler("support", support_command))
     
     # Add global callback query handler for subscription flow buttons that might be from old messages
@@ -1214,6 +1215,8 @@ async def main() -> None:
     
     application.add_handler(CallbackQueryHandler(menu_my_subscriptions_handler, pattern="^menu_my_subscriptions$"))
     application.add_handler(CallbackQueryHandler(menu_help_handler, pattern="^menu_help$"))
+    application.add_handler(CallbackQueryHandler(menu_instruction_handler, pattern="^menu_instruction$"))
+    application.add_handler(CallbackQueryHandler(instruction_platform_chosen, pattern="^instruction_platform_.*|^instruction_cancel$"))
     
     # Add debug handler to log all incoming messages
     application.add_handler(MessageHandler(filters.ALL, log_all_messages))
