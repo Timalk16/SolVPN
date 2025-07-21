@@ -1255,6 +1255,8 @@ async def main() -> None:
         except Exception as e:
             logger.error(f"Error during shutdown: {e}")
 
+    application.add_handler(CallbackQueryHandler(menu_support_handler, pattern="^menu_support$"))
+
 async def handle_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle subscription renewal request."""
     query = update.callback_query
