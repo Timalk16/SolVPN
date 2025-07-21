@@ -1214,6 +1214,7 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(menu_help_handler, pattern="^menu_help$"))
     application.add_handler(CallbackQueryHandler(menu_instruction_handler, pattern="^menu_instruction$"))
     application.add_handler(CallbackQueryHandler(instruction_platform_chosen, pattern="^instruction_platform_.*|^instruction_cancel$"))
+    application.add_handler(CallbackQueryHandler(menu_support_handler, pattern="^menu_support$"))
     
     # Add debug handler to log all incoming messages
     application.add_handler(MessageHandler(filters.ALL, log_all_messages))
