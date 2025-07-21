@@ -191,7 +191,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     
     # Send logo image
     with open("assets/logo.jpeg", "rb") as img:
-        await update.message.reply_photo(photo=InputFile(img))
+        await update.effective_message.reply_photo(photo=InputFile(img))
 
     # Get testnet status
     testnet_status = get_testnet_status()
