@@ -89,22 +89,17 @@ if __name__ == '__main__':
                 server_info = client.get_server_information()
                 print(f"Server name: {server_info.get('name', 'N/A')}")
                 print(f"Number of keys: {len(client.get_keys())}")
+                # Try to create a test key
+                print("Creating test key...")
+                key_id, access_url = create_outline_key(client, "test_key")
+                if key_id:
+                    print(f"Created key ID: {key_id}, URL: {access_url}")
+                    # Optionally delete the test key
+                    deleted = delete_outline_key(client, key_id)
+                    print(f"Deleted test key: {deleted}")
+                else:
+                    print("Failed to create test key.")
             except Exception as e:
-                print(f"Error getting server info for {country}: {e}")
+                print(f"Error getting server info or creating key for {country}: {e}")
         else:
             print(f"Failed to connect to {country} Outline server. Check config.py and server status.")
-
-        # Example: Create and delete a test key
-        # print("Creating test key...")
-        # key_id, access_url = create_outline_key(client, "test_key")
-        # if key_id:
-        #     print(f"Created key ID: {key_id}, URL: {access_url}")
-        #     print(f"Renaming key {key_id}...")
-        #     rename_outline_key(client, key_id, "my_renamed_test_key")
-        #     print(f"Deleting key {key_id}...")
-        #     if delete_outline_key(client, key_id):
-        #         print(f"Key {key_id} deleted successfully.")
-        #     else:
-        #         print(f"Failed to delete key {key_id}.")
-        # else:
-        #     print("Failed to create test key.")
