@@ -59,4 +59,4 @@ ERROR test_bot_flows.py
 ERROR test_conversation_fallback.py
 ERROR test_handlers.py
 !!!!!!!!!!!!!!!!!!! Interrupted: 5 errors during collection !!!!!!!!!!!!!!!!!!!!
-============================== 5 errors in 0.31s ===============================
+============================== 5 errors in 0.16s ===============================

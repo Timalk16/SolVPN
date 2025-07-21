@@ -182,7 +182,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # If user was in a subscription flow, notify about cancellation
     if any(k in context.user_data for k in [
         'selected_duration', 'payment_id', 'pending_subscription_id', 'payment_type', 'country_package_id']):
-        await update.message.reply_text(
+        await update.effective_message.reply_text(
             "Процесс подписки отменен. Используйте /subscribe, чтобы начать сначала.",
             reply_markup=MAIN_MENU_BUTTON
         )
@@ -221,7 +221,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await update.message.reply_text(menu_text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    await update.effective_message.reply_text(menu_text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
 
 @rate_limit_command("help")
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
