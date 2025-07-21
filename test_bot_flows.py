@@ -213,6 +213,13 @@ class TelegramBotTester:
         await self.send_message("/support")
         await self.wait_for_response()
     
+    async def test_menu_support_button(self):
+        """Test the Поддержка (Support) menu button"""
+        await self.send_message("/start")
+        await self.wait_for_response()
+        await self.send_callback_query("menu_support")
+        await self.wait_for_response()
+    
     async def test_unknown_command(self):
         """Test unknown command handling"""
         await self.send_message("/unknown_command_12345")
@@ -241,6 +248,7 @@ class TelegramBotTester:
             (self.test_admin_commands, "Admin Commands"),
             (self.test_my_subscriptions, "My Subscriptions"),
             (self.test_support_command, "Support Command"),
+            (self.test_menu_support_button, "Menu Support Button"),
             (self.test_unknown_command, "Unknown Command"),
             (self.test_rate_limiting, "Rate Limiting"),
         ]

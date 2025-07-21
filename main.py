@@ -1851,6 +1851,7 @@ MAIN_MENU_BUTTON = InlineKeyboardMarkup([
 
 # Add a handler for menu_support
 async def menu_support_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("menu_support_handler called")
     query = update.callback_query
     await query.answer()
     chat_id = query.message.chat_id
@@ -1858,6 +1859,7 @@ async def menu_support_handler(update: Update, context: ContextTypes.DEFAULT_TYP
         "Связаться с поддержкой можно по аккаунту: @SolSuprt\n"
         "Нажмите на ник или перейдите по ссылке: https://t.me/SolSuprt"
     )
+    logger.info(f"Sending support info to chat_id={chat_id}")
     await context.bot.send_message(chat_id=chat_id, text=support_text, reply_markup=MAIN_MENU_BUTTON)
 
 if __name__ == "__main__":
