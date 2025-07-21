@@ -95,8 +95,8 @@ DURATION_PLANS = {
 COUNTRY_PACKAGES = {
     "standard": {
         "name": "Стандартный пакет",
-        "description": "Доступ к серверам в Германии и Франции",
-        "countries": ["germany", "france"]
+        "description": "Доступ к серверам в Германии, Франции, Лондоне и Стокгольме",
+        "countries": ["germany", "france", "london", "stockholm"]
     },
     "extended": {
         "name": "Расширенный пакет",
