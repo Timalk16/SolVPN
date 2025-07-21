@@ -1099,6 +1099,7 @@ async def post_init(application: Application) -> None:
         BotCommand("start", "Главное меню"),
         BotCommand("subscribe", "Покупка/продление доступа"),
         BotCommand("my_subscriptions", "Мои подписки"),
+        BotCommand("instruction", "Инструкция по подключению"),
         BotCommand("help", "Помощь"),
     ]
     await application.bot.set_my_commands(user_commands)
