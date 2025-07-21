@@ -24,6 +24,18 @@ OUTLINE_SERVERS = {
         "cert_sha256": os.getenv("OUTLINE_CERT_SHA256_FRANCE", ""),
         "name": "France",
         "flag": "🇫🇷"
+    },
+    "london": {
+        "api_url": os.getenv("OUTLINE_API_URL_LONDON"),
+        "cert_sha256": os.getenv("OUTLINE_CERT_SHA256_LONDON", ""),
+        "name": "London",
+        "flag": "🇬🇧"
+    },
+    "stockholm": {
+        "api_url": os.getenv("OUTLINE_API_URL_STOCKHOLM"),
+        "cert_sha256": os.getenv("OUTLINE_CERT_SHA256_STOCKHOLM", ""),
+        "name": "Stockholm",
+        "flag": "🇸🇪"
     }
 }
 
@@ -63,7 +75,7 @@ DURATION_PLANS = {
         "name": "Подписка на 1 месяц",
         "duration_days": 30,
         "price_usdt": 2.00,
-        "price_rub": 15.00
+        "price_rub": 159.00
     },
     "3_months": {
         "name": "Подписка на 3 месяца",
@@ -88,8 +100,8 @@ COUNTRY_PACKAGES = {
     },
     "extended": {
         "name": "Расширенный пакет",
-        "description": "Доступ ко всем локациям, включая США",
-        "countries": ["germany", "france", "usa"]
+        "description": "Доступ ко всем локациям, включая США, Лондон и Стокгольм",
+        "countries": ["germany", "france", "usa", "london", "stockholm"]
     }
 }
 
