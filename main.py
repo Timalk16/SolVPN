@@ -1852,6 +1852,10 @@ async def instruction_platform_chosen(update: Update, context: ContextTypes.DEFA
     await query.edit_message_text("Неизвестная команда.")
     return ConversationHandler.END
 
+MAIN_MENU_BUTTON = InlineKeyboardMarkup([
+    [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")]
+])
+
 if __name__ == "__main__":
     try:
         asyncio.run(main())
