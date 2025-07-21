@@ -82,12 +82,30 @@ def health():
     """Health check for Render"""
     # Check bot status
     check_bot_status()
-    
+    db_status = "ok"
+    db_error = None
+
+    if USE_POSTGRESQL:
+        try:
+            conn = get_connection()
+            cur = conn.cursor()
+            cur.execute("SELECT 1;")
+            cur.fetchone()
+            cur.close()
+            conn.close()
+        except Exception as e:
+            db_status = "error"
+            db_error = str(e)
+
+    status_code = 200 if db_status == "ok" and bot_status["running"] and not bot_status["error"] else 503
+
     return jsonify({
-        "status": "healthy",
+        "status": "healthy" if status_code == 200 else "unhealthy",
         "bot_running": bot_status["running"],
-        "bot_error": bot_status["error"]
-    }), 200
+        "bot_error": bot_status["error"],
+        "db_status": db_status,
+        "db_error": db_error
+    }), status_code
 
 @app.route('/status')
 def status():
