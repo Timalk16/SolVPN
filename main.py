@@ -89,10 +89,9 @@ def build_payment_method_keyboard(duration_plan_id: str) -> InlineKeyboardMarkup
     return InlineKeyboardMarkup(keyboard)
 
 def build_country_selection_keyboard() -> InlineKeyboardMarkup:
-    """Build the inline keyboard for country package selection."""
+    """Build the inline keyboard for country package selection (only standard for now)."""
     keyboard = [
-        [InlineKeyboardButton(f"{package['name']} - {package['description']}", callback_data=f"countries_{package_id}")]
-        for package_id, package in COUNTRY_PACKAGES.items()
+        [InlineKeyboardButton(f"{COUNTRY_PACKAGES['standard']['name']} - {COUNTRY_PACKAGES['standard']['description']}", callback_data="countries_standard")]
     ]
     keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_subscription_flow")])
     return InlineKeyboardMarkup(keyboard)

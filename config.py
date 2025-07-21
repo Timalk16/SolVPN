@@ -63,7 +63,7 @@ DURATION_PLANS = {
         "name": "Подписка на 1 месяц",
         "duration_days": 30,
         "price_usdt": 2.00,
-        "price_rub": 159.00
+        "price_rub": 15.00
     },
     "3_months": {
         "name": "Подписка на 3 месяца",
