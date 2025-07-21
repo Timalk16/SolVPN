@@ -302,7 +302,7 @@ def build_my_subscriptions_message_and_keyboard(active_subs):
                     f"`{access_url_list[i]}`\n\n"
                 )
         keyboard.append([InlineKeyboardButton(f"🔄 Продлить {duration_plan_name}", callback_data=f"renew_{sub_id}")])
-    message += "\nℹ️ Чтобы скопировать ключ, нажмите и удерживайте его (или кликните ПКМ на компьютере). Затем вставьте ключ в приложение Outline."
+    message += "\nℹ️ Чтобы скопировать ключ, кликните на него. Затем вставьте ключ в приложение Outline."
     return message, keyboard
 
 @rate_limit_command("my_subscriptions")
