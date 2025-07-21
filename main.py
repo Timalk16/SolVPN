@@ -217,6 +217,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         [InlineKeyboardButton("📋 Мои подписки", callback_data="menu_my_subscriptions")],
         [InlineKeyboardButton("📖 Инструкция", callback_data="menu_instruction")],
         [InlineKeyboardButton("❓ Помощь", callback_data="menu_help")],
+        [InlineKeyboardButton("💬 Поддержка", callback_data="menu_support")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -982,22 +983,12 @@ async def admin_delete_subscription(update: Update, context: ContextTypes.DEFAUL
     return ConversationHandler.END
 
 async def back_to_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handle the back to menu button press."""
-    query = update.callback_query
-    await query.answer()
-    
-    # Clear any conversation data
     context.user_data.clear()
-    
-    # Send the main menu message
-    await query.edit_message_text(
-        "Добро пожаловать в VPN Бот! 🚀\n\n"
-        "Доступные команды:\n"
-        "/subscribe - Подписаться на услугу VPN\n"
-        "/my_subscriptions - Проверить ваши активные подписки\n"
-        "/help - Получить помощь и поддержку\n"
-        "/start - Показать это меню"
-    )
+    if update.callback_query:
+        await update.callback_query.answer()
+        await start_command(update, context)
+    elif update.message:
+        await start_command(update, context)
     return ConversationHandler.END
 
 # --- Main Menu Button Handlers ---
@@ -1855,6 +1846,17 @@ async def instruction_platform_chosen(update: Update, context: ContextTypes.DEFA
 MAIN_MENU_BUTTON = InlineKeyboardMarkup([
     [InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")]
 ])
+
+# Add a handler for menu_support
+async def menu_support_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    chat_id = query.message.chat_id
+    support_text = (
+        "Связаться с поддержкой можно по аккаунту: @SolSuprt\n"
+        "Нажмите на ник или перейдите по ссылке: https://t.me/SolSuprt"
+    )
+    await context.bot.send_message(chat_id=chat_id, text=support_text, reply_markup=MAIN_MENU_BUTTON)
 
 if __name__ == "__main__":
     try:
