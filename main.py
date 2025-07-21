@@ -183,7 +183,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if any(k in context.user_data for k in [
         'selected_duration', 'payment_id', 'pending_subscription_id', 'payment_type', 'country_package_id']):
         await update.message.reply_text(
-            "Процесс подписки отменен. Используйте /subscribe, чтобы начать сначала."
+            "Процесс подписки отменен. Используйте /subscribe, чтобы начать сначала.",
+            reply_markup=MAIN_MENU_BUTTON
         )
     # Clear any existing conversation state when used as fallback
     context.user_data.clear()
@@ -230,7 +231,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if any(k in context.user_data for k in [
         'selected_duration', 'payment_id', 'pending_subscription_id', 'payment_type', 'country_package_id']):
         await update.message.reply_text(
-            "Процесс подписки отменен. Используйте /subscribe, чтобы начать сначала."
+            "Процесс подписки отменен. Используйте /subscribe, чтобы начать сначала.",
+            reply_markup=MAIN_MENU_BUTTON
         )
     # Clear any existing conversation state when used as fallback
     context.user_data.clear()
@@ -254,7 +256,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "\n\nAdmin Commands:\n"
             "/admin\\_del\\_sub \\- Delete a user subscription\\."
         )
-    await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN_V2)
+    await update.message.reply_text(help_text, parse_mode=ParseMode.MARKDOWN_V2, reply_markup=MAIN_MENU_BUTTON)
 
 @rate_limit_command("subscribe")
 async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -265,7 +267,8 @@ async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if any(k in context.user_data for k in [
         'selected_duration', 'payment_id', 'pending_subscription_id', 'payment_type', 'country_package_id']):
         await update.message.reply_text(
-            "Процесс подписки отменен. Используйте /subscribe, чтобы начать сначала."
+            "Процесс подписки отменен. Используйте /subscribe, чтобы начать сначала.",
+            reply_markup=MAIN_MENU_BUTTON
         )
     # Clear any existing conversation state to start fresh
     context.user_data.clear()
@@ -307,9 +310,10 @@ async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT
     user_id = update.effective_user.id
     active_subs = get_active_subscriptions(user_id)
     if not active_subs:
-        await update.message.reply_text("У вас нет активных подписок. Используйте /subscribe, чтобы приобрести одну!")
+        await update.message.reply_text("У вас нет активных подписок. Используйте /subscribe, чтобы приобрести одну!", reply_markup=MAIN_MENU_BUTTON)
         return
     message, keyboard = build_my_subscriptions_message_and_keyboard(active_subs)
+    keyboard.append([InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")])
     await update.message.reply_text(
         message, 
         parse_mode=ParseMode.MARKDOWN,
@@ -1017,9 +1021,10 @@ async def menu_my_subscriptions_handler(update: Update, context: ContextTypes.DE
     chat_id = query.message.chat_id
     active_subs = get_active_subscriptions(user_id)
     if not active_subs:
-        await context.bot.send_message(chat_id=chat_id, text="У вас нет активных подписок. Используйте /subscribe, чтобы приобрести одну!")
+        await context.bot.send_message(chat_id=chat_id, text="У вас нет активных подписок. Используйте /subscribe, чтобы приобрести одну!", reply_markup=MAIN_MENU_BUTTON)
         return
     message, keyboard = build_my_subscriptions_message_and_keyboard(active_subs)
+    keyboard.append([InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")])
     await context.bot.send_message(
         chat_id=chat_id,
         text=message,
@@ -1046,7 +1051,7 @@ async def menu_help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     )
     if user.id == ADMIN_USER_ID:
         help_text += ("\n\nAdmin Commands:\n/admin\\_del\\_sub \\- Delete a user subscription\\.")
-    await context.bot.send_message(chat_id=chat_id, text=help_text, parse_mode=ParseMode.MARKDOWN_V2)
+    await context.bot.send_message(chat_id=chat_id, text=help_text, parse_mode=ParseMode.MARKDOWN_V2, reply_markup=MAIN_MENU_BUTTON)
 
 @rate_limit_command("support")
 async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1055,11 +1060,11 @@ async def support_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "Связаться с поддержкой можно по аккаунту: @SolSuprt\n"
         "Нажмите на ник или перейдите по ссылке: https://t.me/SolSuprt"
     )
-    await update.message.reply_text(support_text)
+    await update.message.reply_text(support_text, reply_markup=MAIN_MENU_BUTTON)
 
 # --- Fallback and Error Handlers ---
 async def unknown_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Извините, я не понял эту команду. Попробуйте /help.") # No parse_mode
+    await update.message.reply_text("Извините, я не понял эту команду. Попробуйте /help.", reply_markup=MAIN_MENU_BUTTON) # No parse_mode
 
 def send_error_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int, text: str) -> None:
     """Utility to send an error message to a user, logs on failure."""
@@ -1825,7 +1830,7 @@ async def instruction_platform_chosen(update: Update, context: ContextTypes.DEFA
     await query.answer()
     data = query.data
     if data == "instruction_cancel":
-        await query.edit_message_text("Действие отменено.")
+        await query.edit_message_text("Действие отменено.", reply_markup=MAIN_MENU_BUTTON)
         return ConversationHandler.END
     if data.startswith("instruction_platform_"):
         platform = data[len("instruction_platform_"):]
