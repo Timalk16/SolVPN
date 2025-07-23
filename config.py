@@ -19,23 +19,11 @@ OUTLINE_SERVERS = {
         "name": "Germany",
         "flag": "🇩🇪"
     },
-    "france": {
-        "api_url": os.getenv("OUTLINE_API_URL_FRANCE"),
-        "cert_sha256": os.getenv("OUTLINE_CERT_SHA256_FRANCE", ""),
-        "name": "France",
-        "flag": "🇫🇷"
-    },
-    "london": {
-        "api_url": os.getenv("OUTLINE_API_URL_LONDON"),
-        "cert_sha256": os.getenv("OUTLINE_CERT_SHA256_LONDON", ""),
-        "name": "London",
-        "flag": "🇬🇧"
-    },
-    "stockholm": {
-        "api_url": os.getenv("OUTLINE_API_URL_STOCKHOLM"),
-        "cert_sha256": os.getenv("OUTLINE_CERT_SHA256_STOCKHOLM", ""),
-        "name": "Stockholm",
-        "flag": "🇸🇪"
+    "amsterdam": {
+        "api_url": os.getenv("OUTLINE_API_URL_AMSTERDAM"),
+        "cert_sha256": os.getenv("OUTLINE_CERT_SHA256_AMSTERDAM", ""),
+        "name": "Amsterdam",
+        "flag": "🇳🇱"
     }
 }
 
@@ -75,7 +63,7 @@ DURATION_PLANS = {
         "name": "Подписка на 1 месяц",
         "duration_days": 30,
         "price_usdt": 2.00,
-        "price_rub": 159.00
+        "price_rub": 15.00
     },
     "3_months": {
         "name": "Подписка на 3 месяца",
@@ -95,13 +83,13 @@ DURATION_PLANS = {
 COUNTRY_PACKAGES = {
     "standard": {
         "name": "Стандартный пакет",
-        "description": "Доступ к серверам в Германии, Франции, Лондоне и Стокгольме",
-        "countries": ["germany", "france", "london", "stockholm"]
+        "description": "Доступ к серверам в Германии и Амстердаме",
+        "countries": ["germany", "amsterdam"]
     },
     "extended": {
         "name": "Расширенный пакет",
-        "description": "Доступ ко всем локациям, включая США, Лондон и Стокгольм",
-        "countries": ["germany", "france", "usa", "london", "stockholm"]
+        "description": "Доступ к серверам в Германии и Амстердаме",
+        "countries": ["germany", "amsterdam"]
     }
 }
 
