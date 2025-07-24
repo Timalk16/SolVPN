@@ -69,7 +69,7 @@ DURATION_PLANS = {
         "name": "Подписка на 3 месяца",
         "duration_days": 90,
         "price_usdt": 6.00,
-        "price_rub": 450.00
+        "price_rub": 10.00
     },
     "12_months": {
         "name": "Подписка на 12 месяцев",
@@ -139,3 +139,12 @@ RATE_LIMIT_SECONDS = 5  # e.g., user can't use /subscribe more than once every 5
 COMMAND_RATE_LIMIT = {"default": 3, "subscribe": 10} # seconds per command, default and specific
 CALLBACK_RATE_LIMIT = 2 # seconds between callback queries from the same user
 MESSAGE_RATE_LIMIT = 1 # seconds between general messages (less critical but can be useful)
+
+VLESS_SERVERS = {
+    "test": {
+        "host": os.getenv("VLESS_HOST_TEST"),
+        "port": int(os.getenv("VLESS_PORT_TEST", 443)),
+        "name": "Test VLESS Server",
+        "flag": "🚀"
+    }
+}

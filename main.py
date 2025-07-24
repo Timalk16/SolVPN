@@ -22,7 +22,7 @@ import telegram
 
 from config import ( 
     TELEGRAM_BOT_TOKEN, DURATION_PLANS, COUNTRY_PACKAGES, ADMIN_USER_ID, OUTLINE_SERVERS,
-    COMMAND_RATE_LIMIT, CALLBACK_RATE_LIMIT, MESSAGE_RATE_LIMIT, DB_PATH # Added DB_PATH
+    COMMAND_RATE_LIMIT, CALLBACK_RATE_LIMIT, MESSAGE_RATE_LIMIT, DB_PATH, VLESS_SERVERS # Added VLESS_SERVERS
 )
 from database import (
     init_db, add_user_if_not_exists, create_subscription_record,
@@ -30,7 +30,8 @@ from database import (
     get_subscription_countries, update_subscription_country_package,
     # New DB functions for admin:
     get_all_active_subscriptions_for_admin, get_subscription_by_id, cancel_subscription_by_admin,
-    get_subscription_for_admin, mark_subscription_expired, renew_subscription
+    get_subscription_for_admin, mark_subscription_expired, renew_subscription,
+    init_vless_db, add_vless_subscription
 )
 from outline_utils import (
     get_outline_client, create_outline_key, rename_outline_key, delete_outline_key, get_available_countries
@@ -41,6 +42,7 @@ from payment_utils import (
     get_payment_status, get_yookassa_payment_details, get_yookassa_payment_status
 )
 from scheduler_tasks import check_expired_subscriptions
+from vless_utils import add_vless_user
 
 # Enable logging
 logging.basicConfig(
@@ -1257,6 +1259,9 @@ async def main() -> None:
 
     application.add_handler(CallbackQueryHandler(menu_support_handler, pattern="^menu_support$"))
 
+    # Add handler for /vless_subscribe command
+    application.add_handler(CommandHandler("vless_subscribe", vless_subscribe))
+
 async def handle_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle subscription renewal request."""
     query = update.callback_query
@@ -1861,6 +1866,28 @@ async def menu_support_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     )
     logger.info(f"Sending support info to chat_id={chat_id}")
     await context.bot.send_message(chat_id=chat_id, text=support_text, reply_markup=MAIN_MENU_BUTTON)
+
+async def vless_subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handler for /vless_subscribe command (test only, no payment)."""
+    user = update.effective_user
+    user_id = user.id
+    # 1. Ensure VLESS DB table exists
+    init_vless_db()
+    # 2. Add VLESS user (dummy for now)
+    server_config = VLESS_SERVERS["test"]
+    vless_uuid, vless_uri = add_vless_user(server_config, user_id=str(user_id))
+    # 3. Store subscription (1 week expiry for test)
+    from datetime import datetime, timedelta
+    end_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+    add_vless_subscription(user_id, vless_uuid, vless_uri, end_date)
+    # 4. Send VLESS URI to user
+    msg = (
+        f"🚀 <b>Your VLESS VPN (Test) is ready!</b>\n\n"
+        f"<b>VLESS URI:</b> <code>{vless_uri}</code>\n\n"
+        f"Valid until: <b>{end_date}</b>\n\n"
+        f"Use a V2Ray/Xray client to connect. This is a test server."
+    )
+    await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
 
 if __name__ == "__main__":
     try:

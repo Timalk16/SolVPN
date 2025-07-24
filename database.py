@@ -94,6 +94,25 @@ def init_sqlite_db():
     conn.commit()
     conn.close()
 
+def init_vless_db():
+    """Initialize VLESS subscriptions table."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS vless_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            vless_uuid TEXT,
+            vless_uri TEXT,
+            start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            end_date TIMESTAMP,
+            status TEXT DEFAULT 'active',
+            FOREIGN KEY(user_id) REFERENCES users(user_id)
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
 def add_user_if_not_exists(user_id, username, first_name):
     """Add a user if they don't already exist."""
     if USE_POSTGRESQL and postgresql_functions:
@@ -165,6 +184,26 @@ def add_subscription_country_sqlite(subscription_id, country_code, outline_key_i
     ''', (subscription_id, country_code, outline_key_id, outline_access_url))
     conn.commit()
     conn.close()
+
+def add_vless_subscription(user_id, vless_uuid, vless_uri, end_date):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO vless_subscriptions (user_id, vless_uuid, vless_uri, end_date)
+        VALUES (?, ?, ?, ?)
+    ''', (user_id, vless_uuid, vless_uri, end_date))
+    conn.commit()
+    conn.close()
+
+def get_vless_subscriptions(user_id):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT id, vless_uuid, vless_uri, start_date, end_date, status FROM vless_subscriptions WHERE user_id = ?
+    ''', (user_id,))
+    results = cursor.fetchall()
+    conn.close()
+    return results
 
 def activate_subscription(subscription_db_id, duration_days, payment_id="MANUAL_CRYPTO"):
     """Activate a subscription with start and end dates."""
