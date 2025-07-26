@@ -11,4 +11,3 @@ gunicorn>=21.0.0
 yookassa>=3.5.0
 # PostgreSQL support:
 psycopg2-binary>=2.9.0
-xray-api
