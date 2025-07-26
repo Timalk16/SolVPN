@@ -1,112 +1,111 @@
-import os
 import uuid
-import requests
+from xray_api.client import XrayClient
 
-VLESS_API_URL = os.getenv("VLESS_API_URL")  # e.g., http://77.110.110.205:55237/hiig4yW7LdzDG6RGzj/api/
-VLESS_API_USERNAME = os.getenv("VLESS_API_USERNAME")
-VLESS_API_PASSWORD = os.getenv("VLESS_API_PASSWORD")
+# --- VLESS User Management ---
 
-class VlessAPI:
-    def __init__(self, api_url=None, username=None, password=None):
-        self.api_url = api_url or VLESS_API_URL
-        self.username = username or VLESS_API_USERNAME
-        self.password = password or VLESS_API_PASSWORD
-        self.session = requests.Session()
-        self.token = None
-        self.login()
+def get_xray_client(api_address: str, api_port: int) -> XrayClient:
+    """Initializes and returns an XrayClient."""
+    try:
+        client = XrayClient(api_address, api_port)
+        return client
+    except Exception as e:
+        print(f"Error initializing Xray client: {e}")
+        return None
 
-    def login(self):
-        """Authenticate with 3x-ui API and store the session token."""
-        url = self.api_url.rstrip("/") + "/login"
-        data = {"username": self.username, "password": self.password}
-        resp = self.session.post(url, json=data)
-        if resp.status_code == 200 and resp.json().get("success"):
-            self.token = resp.json()["data"]["token"]
-            self.session.headers.update({"Authorization": f"Bearer {self.token}"})
-        else:
-            raise Exception(f"3x-ui API login failed: {resp.text}")
+def add_vless_user(server_config: dict, user_id: str = None, expiry_days: int = 7) -> tuple[str, str] | tuple[None, None]:
+    """
+    Adds a new user to the VLESS inbound proxy.
+    Returns the user's UUID and the VLESS URI for a REALITY setup.
+    """
+    client = get_xray_client(server_config['host'], server_config['api_port'])
+    if not client:
+        return None, None
 
-    def add_vless_user(self, inbound_id, remark=None, expiry_days=7):
-        """Add a VLESS user to the specified inbound (server). Returns (uuid, uri)."""
-        # Generate UUID for user
-        vless_uuid = str(uuid.uuid4())
-        if not remark:
-            remark = f"bot_{vless_uuid[:8]}"
-        # Prepare payload
-        url = self.api_url.rstrip("/") + "/xui/inbound/addClient"
-        payload = {
-            "id": inbound_id,  # The inbound ID for your VLESS server
-            "settings": {
-                "clients": [
-                    {
-                        "id": vless_uuid,
-                        "flow": "",  # Adjust if you use XTLS-Flow
-                        "email": remark
-                    }
-                ]
-            },
-            "expiryTime": expiry_days * 24 * 3600  # in seconds
-        }
-        resp = self.session.post(url, json=payload)
-        if resp.status_code == 200 and resp.json().get("success"):
-            return vless_uuid
-        else:
-            raise Exception(f"Failed to add VLESS user: {resp.text}")
+    # Generate a unique UUID for the new user
+    user_uuid = str(uuid.uuid4())
+    
+    # The 'email' field in Xray is used as a unique identifier for the user.
+    # We'll use the user_id from Telegram to create a unique email.
+    user_email = f"user-{user_id}" if user_id else f"user-{user_uuid[:8]}"
 
-    def remove_vless_user(self, inbound_id, vless_uuid):
-        """Remove a VLESS user from the specified inbound."""
-        url = self.api_url.rstrip("/") + "/xui/inbound/delClient"
-        payload = {
-            "id": inbound_id,
-            "email": vless_uuid  # 3x-ui may use email or id; adjust as needed
-        }
-        resp = self.session.post(url, json=payload)
-        if resp.status_code == 200 and resp.json().get("success"):
-            return True
-        else:
-            raise Exception(f"Failed to remove VLESS user: {resp.text}")
+    try:
+        # Add the user to the VLESS inbound (identified by its tag)
+        client.add_user(inbound_tag="vless-in", email=user_email, uuid=user_uuid)
+        print(f"Successfully added VLESS user {user_email} with UUID {user_uuid}")
 
-    def get_inbounds(self):
-        """Get all inbounds (servers) from 3x-ui."""
-        url = self.api_url.rstrip("/") + "/xui/inbound/list"
-        resp = self.session.get(url)
-        if resp.status_code == 200 and resp.json().get("success"):
-            return resp.json()["data"]
-        else:
-            raise Exception(f"Failed to get inbounds: {resp.text}")
+        # Construct the VLESS URI with REALITY parameters
+        # These parameters MUST match your server's config.json
+        vless_uri = (
+            f"vless://{user_uuid}@{server_config['public_host']}:{server_config['port']}"
+            f"?encryption=none"
+            f"&security=reality"
+            f"&sni={server_config['sni']}"
+            f"&flow=xtls-rprx-vision"
+            f"&publicKey={server_config['publicKey']}"
+            f"&shortId={server_config['shortId']}"
+            f"#{server_config['name']}-{user_id}"
+        )
+        # Note: 'fp' (fingerprint) can also be added for better camouflage, e.g., &fp=chrome
+
+        return user_uuid, vless_uri
+
+    except Exception as e:
+        print(f"Error adding VLESS user {user_email}: {e}")
+        return None, None
+
+def remove_vless_user(server_config: dict, user_id: str) -> bool:
+    """Removes a user from the VLESS inbound proxy."""
+    client = get_xray_client(server_config['host'], server_config['api_port'])
+    if not client:
+        return False
+
+    user_email = f"user-{user_id}"
+    try:
+        client.remove_user(inbound_tag="vless-in", email=user_email)
+        print(f"Successfully removed VLESS user {user_email}")
+        return True
+    except Exception as e:
+        # Xray's API might error if the user doesn't exist, which is fine.
+        if "not found" in str(e):
+             print(f"User {user_email} not found for deletion, considering it a success.")
+             return True
+        print(f"Error removing VLESS user {user_email}: {e}")
+        return False
 
 def generate_vless_uri(server_config, vless_uuid):
-    """Generate a VLESS URI for the user."""
-    host = server_config["host"]
-    port = server_config["port"]
-    return f"vless://{vless_uuid}@{host}:{port}?encryption=none#VPN-Bot-User"
+    """Generate a VLESS URI for the user with REALITY parameters."""
+    return (
+        f"vless://{vless_uuid}@{server_config['public_host']}:{server_config['port']}"
+        f"?encryption=none"
+        f"&security=reality"
+        f"&sni={server_config['sni']}"
+        f"&flow=xtls-rprx-vision"
+        f"&publicKey={server_config['publicKey']}"
+        f"&shortId={server_config['shortId']}"
+        f"#{server_config['name']}"
+    )
 
-# Example usage for bot flow:
-def add_vless_user(server_config, user_id=None, expiry_days=7):
-    """Add a VLESS user via 3x-ui API and return (uuid, uri)."""
-    api = VlessAPI()
-    # Find the correct inbound ID for this server
-    inbounds = api.get_inbounds()
-    inbound_id = None
-    for inbound in inbounds:
-        if inbound["listen"] == server_config["host"] or inbound["remark"] == server_config["name"]:
-            inbound_id = inbound["id"]
-            break
-    if not inbound_id:
-        raise Exception("No matching inbound found for this server.")
-    vless_uuid = api.add_vless_user(inbound_id, remark=str(user_id), expiry_days=expiry_days)
-    uri = generate_vless_uri(server_config, vless_uuid)
-    return vless_uuid, uri
-
-def remove_vless_user(server_config, vless_uuid):
-    api = VlessAPI()
-    # Find the correct inbound ID for this server
-    inbounds = api.get_inbounds()
-    inbound_id = None
-    for inbound in inbounds:
-        if inbound["listen"] == server_config["host"] or inbound["remark"] == server_config["name"]:
-            inbound_id = inbound["id"]
-            break
-    if not inbound_id:
-        raise Exception("No matching inbound found for this server.")
-    return api.remove_vless_user(inbound_id, vless_uuid) 
+if __name__ == '__main__':
+    # --- Test Functions ---
+    # Replace with your actual Xray server details for testing
+    test_server_config = {
+        "host": "127.0.0.1",          # The IP where the Xray API is listening
+        "api_port": 62789,            # The port for the Xray API
+        "public_host": "your.domain.com", # Your server's public domain or IP
+        "port": 443,                  # The public port for VLESS
+        "security": "reality",        # or "tls" or other
+        "network": "tcp",             # or "ws"
+        "name": "MyVLESSServer"
+        # Add other params like ws_path, ws_host if you use WebSocket
+    }
+    
+    test_user_id = "12345678"
+    
+    print("--- Testing VLESS User Addition ---")
+    new_uuid, new_uri = add_vless_user(test_server_config, test_user_id)
+    if new_uuid:
+        print(f"Created URI: {new_uri}")
+    
+    print("\n--- Testing VLESS User Removal ---")
+    success = remove_vless_user(test_server_config, test_user_id)
+    print(f"Removal successful: {success}") 

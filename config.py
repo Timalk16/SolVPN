@@ -142,9 +142,15 @@ MESSAGE_RATE_LIMIT = 1 # seconds between general messages (less critical but can
 
 VLESS_SERVERS = {
     "test": {
-        "host": os.getenv("VLESS_HOST_TEST"),
-        "port": int(os.getenv("VLESS_PORT_TEST", 443)),
         "name": "Test VLESS Server",
-        "flag": "🚀"
+        "flag": "🚀",
+        "host": os.getenv("VLESS_HOST", "127.0.0.1"),          # The IP where the Xray API is listening
+        "api_port": int(os.getenv("VLESS_API_PORT", "62789")), # The port for the Xray API
+        "public_host": os.getenv("VLESS_PUBLIC_HOST", "77.110.110.205"), # Your server's public domain or IP
+        "port": int(os.getenv("VLESS_PORT", "443")),           # The public port for VLESS
+        # --- REALITY PARAMS ---
+        "sni": os.getenv("VLESS_SNI", "www.github.com"),    # SNI (Server Name Indication)
+        "publicKey": os.getenv("VLESS_PUBLIC_KEY", "-UjZAt_uWgBbne-xawPtZnWgMQD2-xtxRMaztwvTkUc"),        # Public key from your Xray config
+        "shortId": os.getenv("VLESS_SHORT_ID", "0123abcd"),    # Short ID from your Xray config
     }
 }
