@@ -1149,18 +1149,20 @@ async def post_init(application: Application) -> None:
     user_commands = [
         BotCommand("start", "Главное меню"),
         BotCommand("subscribe", "Покупка/продление доступа (Outline)"),
-        BotCommand("vless_subscribe", "Покупка/продление доступа (VLESS)"),
         BotCommand("my_subscriptions", "Мои подписки"),
-        BotCommand("vless_status", "Мои VLESS подписки"),
         BotCommand("instruction", "Инструкция по подключению"),
         BotCommand("help", "Помощь"),
+    ]
+    
+    admin_commands = user_commands + [
+        BotCommand("vless_subscribe", "Покупка/продление доступа (VLESS) - ADMIN"),
+        BotCommand("vless_status", "Мои VLESS подписки"),
+        BotCommand("test_vps_api", "Test VPS API - ADMIN"),
+        BotCommand("admin_del_sub", "Удалить подписку"),
     ]
     await application.bot.set_my_commands(user_commands)
     logger.info("Set user commands.")
 
-    admin_commands = user_commands + [
-        BotCommand("admin_del_sub", "Удалить подписку"),
-    ]
     try:
         await application.bot.set_my_commands(admin_commands, scope=BotCommandScopeChat(chat_id=ADMIN_USER_ID))
         logger.info(f"Set admin commands for admin {ADMIN_USER_ID}.")
@@ -1292,6 +1294,7 @@ async def main() -> None:
     application.add_handler(CommandHandler("my_subscriptions", my_subscriptions_command))
     application.add_handler(CommandHandler("instruction", instruction_command))
     application.add_handler(CommandHandler("support", support_command))
+    application.add_handler(CommandHandler("test_vps_api", test_vps_api_command))
     application.add_handler(CommandHandler("vless_subscribe", vless_subscribe_command))
     application.add_handler(CommandHandler("vless_status", vless_status_command))
     
@@ -2010,11 +2013,29 @@ async def vless_subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"❌ Error: {str(e)}")
 
 # Add VLESS commands after the existing command handlers
+@admin_only
+@rate_limit_command("test_vps_api")
+async def test_vps_api_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Test VPS API connection (ADMIN ONLY)."""
+    try:
+        from vps_api_client import vps_client
+        result = await vps_client.health_check()
+        await update.message.reply_text(
+            f"✅ VPS API Health Check:\n\n```\n{result}\n```",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"❌ VPS API Error:\n\n```\n{str(e)}\n```",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+@admin_only
 @rate_limit_command("vless_subscribe")
 async def vless_subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Handle VLESS subscription with payment integration."""
+    """Handle VLESS subscription with payment integration (ADMIN ONLY FOR TESTING)."""
     user = update.effective_user
-    logger.info(f"User {user.id} initiated /vless_subscribe.")
+    logger.info(f"Admin {user.id} initiated /vless_subscribe.")
     
     # Clear any existing conversation state
     context.user_data.clear()
@@ -2050,8 +2071,9 @@ async def vless_subscribe_command(update: Update, context: ContextTypes.DEFAULT_
     
     reply_markup = InlineKeyboardMarkup(keyboard)
     await update.message.reply_text(
-        "🚀 Выберите срок подписки на VLESS VPN:\n\n"
-        "VLESS использует протокол REALITY для максимальной безопасности и скорости.",
+        "🧪 **ТЕСТОВЫЙ РЕЖИМ** - Выберите срок подписки на VLESS VPN:\n\n"
+        "VLESS использует протокол REALITY для максимальной безопасности и скорости.\n\n"
+        "💡 Для тестирования используется CryptoBot Testnet.",
         reply_markup=reply_markup
     )
     
@@ -2134,9 +2156,11 @@ async def vless_duration_chosen(update: Update, context: ContextTypes.DEFAULT_TY
         return ConversationHandler.END
     
     text = (
+        f"🧪 **ТЕСТОВЫЙ РЕЖИМ**\n\n"
         f"Вы выбрали: {plan_details['name']}\n"
         f"Цена: {plan_details['price_rub']:.0f} ₽\n\n"
-        "Пожалуйста, выберите способ оплаты:"
+        "Пожалуйста, выберите способ оплаты:\n"
+        "💡 Криптоплатежи используют CryptoBot Testnet"
     )
     
     keyboard = [
@@ -2166,7 +2190,7 @@ async def vless_payment_method_chosen(update: Update, context: ContextTypes.DEFA
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
-            "🚀 Выберите срок подписки на VLESS VPN:",
+            "🧪 **ТЕСТОВЫЙ РЕЖИМ** - Выберите срок подписки на VLESS VPN:",
             reply_markup=reply_markup
         )
         return VLESSConversationState.CHOOSE_VLESS_DURATION.value
@@ -2181,10 +2205,11 @@ async def vless_payment_method_chosen(update: Update, context: ContextTypes.DEFA
     
     if query.data == "vless_pay_crypto":
         try:
-            # Generate crypto payment for VLESS
+            # Generate crypto payment for VLESS (TESTNET for testing)
             instructions, invoice_id = await get_crypto_payment_details(
                 plan['price_usdt'],
-                f"VLESS VPN - {plan['name']}"
+                f"VLESS VPN TESTNET - {plan['name']}",
+                use_testnet=True  # Force testnet for VLESS testing
             )
             
             context.user_data['vless_payment_id'] = invoice_id
@@ -2277,14 +2302,14 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         # Check payment status
         if payment_type == 'crypto':
-            status = await get_payment_status(payment_id)
+            status = await get_payment_status(payment_id, use_testnet=True)  # Use testnet for VLESS
         else:  # card payment
             status = await get_yookassa_payment_status(payment_id)
         
         if status == "paid" or status == "succeeded":
             # Verify the payment
             if payment_type == 'crypto':
-                is_verified = await verify_crypto_payment(payment_id)
+                is_verified = await verify_crypto_payment(payment_id, use_testnet=True)  # Use testnet for VLESS
             else:  # card payment
                 is_verified = await verify_yookassa_payment(payment_id)
             
@@ -2294,7 +2319,9 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
                 
                 try:
                     # Add user to VPS VLESS configuration via API
+                    logger.info(f"Attempting to create VLESS user via API for user {user_id}")
                     result = await add_vless_user_via_api(user_id, plan['duration_days'])
+                    logger.info(f"API response: {result}")
                     
                     if result.get('success'):
                         # Get VLESS URI and expiry from API response
@@ -2308,7 +2335,8 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
                             f"**Истекает:** {expiry_date.strftime('%Y-%m-%d %H:%M UTC')}\n\n"
                             f"**VLESS URI:**\n"
                             f"`{vless_uri}`\n\n"
-                            f"ℹ️ Используйте этот URI в V2Ray/Xray клиенте для подключения."
+                            f"ℹ️ Используйте этот URI в V2Ray/Xray клиенте для подключения.\n"
+                            f"🧪 **ТЕСТОВЫЙ РЕЖИМ** - Оплата через CryptoBot Testnet"
                         )
                         
                         await query.edit_message_text(
@@ -2324,12 +2352,19 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
                         context.user_data.clear()
                         return ConversationHandler.END
                     else:
-                        raise Exception("Failed to create VLESS user on VPS")
+                        error_msg = result.get('error', 'Unknown error')
+                        logger.error(f"VPS API returned error: {error_msg}")
+                        raise Exception(f"VPS API error: {error_msg}")
                         
                 except Exception as e:
                     logger.error(f"Error creating VLESS subscription: {e}")
+                    error_message = (
+                        f"❌ Ошибка при создании VLESS подписки.\n\n"
+                        f"**Детали ошибки:** {str(e)}\n\n"
+                        f"Пожалуйста, обратитесь в поддержку."
+                    )
                     await query.edit_message_text(
-                        "❌ Ошибка при создании VLESS подписки. Пожалуйста, обратитесь в поддержку.",
+                        error_message,
                         reply_markup=InlineKeyboardMarkup([[
                             InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
                         ]])
