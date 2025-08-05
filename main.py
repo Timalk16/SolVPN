@@ -2339,6 +2339,8 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
     
     try:
         # Check payment status
+        logger.info(f"Checking payment status for payment_id: {payment_id}, payment_type: {payment_type}")
+        
         if payment_type == 'crypto':
             # Temporarily override USE_TESTNET for VLESS crypto payments
             import payment_utils
@@ -2348,7 +2350,9 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
             payment_utils.API_BASE_URL = "https://testnet-pay.crypt.bot/api"
             
             try:
+                logger.info("Using testnet for crypto payment verification")
                 status = await get_payment_status(payment_id)
+                logger.info(f"Payment status: {status}")
             finally:
                 # Restore original settings
                 payment_utils.USE_TESTNET = original_use_testnet
@@ -2359,6 +2363,8 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
         
         if status == "paid" or status == "succeeded":
             # Verify the payment
+            logger.info(f"Verifying payment for payment_id: {payment_id}, payment_type: {payment_type}")
+            
             if payment_type == 'crypto':
                 # Temporarily override USE_TESTNET for VLESS crypto payments
                 import payment_utils
@@ -2368,7 +2374,9 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
                 payment_utils.API_BASE_URL = "https://testnet-pay.crypt.bot/api"
                 
                 try:
+                    logger.info("Using testnet for crypto payment verification")
                     is_verified = await verify_crypto_payment(payment_id)
+                    logger.info(f"Payment verification result: {is_verified}")
                 finally:
                     # Restore original settings
                     payment_utils.USE_TESTNET = original_use_testnet
@@ -2378,12 +2386,16 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
                 is_verified = await verify_yookassa_payment(payment_id)
             
             if is_verified:
+                logger.info("Payment verification successful, proceeding with VLESS user creation")
                 # Create VLESS subscription on VPS
                 user_id = update.effective_user.id
                 
                 try:
                     # Add user to VPS VLESS configuration via API
                     logger.info(f"Attempting to create VLESS user via API for user {user_id}")
+                    logger.info(f"Plan details: {plan}")
+                    logger.info(f"Duration days: {plan['duration_days']}")
+                    
                     result = await add_vless_user_via_api(user_id, plan['duration_days'])
                     logger.info(f"API response: {result}")
                     
@@ -2435,6 +2447,7 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
                     )
                     return ConversationHandler.END
             else:
+                logger.error("Payment verification failed")
                 await query.edit_message_text(
                     "❌ Проверка платежа не удалась. Попробуйте еще раз.",
                     reply_markup=InlineKeyboardMarkup([[
@@ -2444,6 +2457,7 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
                 )
                 return VLESSConversationState.AWAIT_VLESS_PAYMENT_CONFIRMATION.value
         else:
+            logger.error(f"Payment status is not paid/succeeded: {status}")
             await query.edit_message_text(
                 "❌ Платеж не найден. Убедитесь, что вы отправили платеж, и попробуйте снова.",
                 reply_markup=InlineKeyboardMarkup([[
