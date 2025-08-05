@@ -42,7 +42,7 @@ from payment_utils import (
     get_payment_status, get_yookassa_payment_details, get_yookassa_payment_status
 )
 from scheduler_tasks import check_expired_subscriptions
-from vless_utils import add_vless_user
+# from vless_utils import add_vless_user  # Not needed - using API bridge instead
 
 # Add VLESS imports at the top with other imports
 from vless_database import init_vless_db, add_vless_subscription, get_user_subscription, remove_vless_subscription
