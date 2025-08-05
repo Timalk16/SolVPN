@@ -11,3 +11,6 @@ gunicorn>=21.0.0
 yookassa>=3.5.0
 # PostgreSQL support:
 psycopg2-binary>=2.9.0
+# For VPS API communication:
+httpx>=0.24.0
+flask-cors>=4.0.0

@@ -1,0 +1,5 @@
+# Minimal requirements for VLESS-only Telegram Bot
+python-telegram-bot[job-queue]>=20.0
+python-dotenv>=1.0.0
+grpcio>=1.60.0
+grpcio-tools>=1.60.0 

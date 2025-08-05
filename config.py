@@ -141,8 +141,8 @@ CALLBACK_RATE_LIMIT = 2 # seconds between callback queries from the same user
 MESSAGE_RATE_LIMIT = 1 # seconds between general messages (less critical but can be useful)
 
 VLESS_SERVERS = {
-    "test": {
-        "name": "Test VLESS Server",
+    "server1": {
+        "name": "VLESS Server 1",
         "flag": "🚀",
         "host": os.getenv("VLESS_HOST", "127.0.0.1"),          # The IP where the Xray API is listening
         "api_port": int(os.getenv("VLESS_API_PORT", "62789")), # The port for the Xray API
@@ -153,4 +153,16 @@ VLESS_SERVERS = {
         "publicKey": os.getenv("VLESS_PUBLIC_KEY", "-UjZAt_uWgBbne-xawPtZnWgMQD2-xtxRMaztwvTkUc"),        # Public key from your Xray config
         "shortId": os.getenv("VLESS_SHORT_ID", "0123abcd"),    # Short ID from your Xray config
     }
+    # Add more servers here when you have them:
+    # "server2": {
+    #     "name": "VLESS Server 2",
+    #     "flag": "⚡",
+    #     "host": "127.0.0.1",
+    #     "api_port": 62789,
+    #     "public_host": "88.220.220.220",
+    #     "port": 443,
+    #     "sni": "www.microsoft.com",
+    #     "publicKey": "your-public-key-2",
+    #     "shortId": "4567efgh",
+    # }
 }

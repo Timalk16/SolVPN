@@ -1,0 +1,57 @@
+{
+  "log": {
+    "loglevel": "warning"
+  },
+  "api": {
+    "tag": "api",
+    "services": ["HandlerService", "StatsService"],
+    "listen": "127.0.0.1:62789"
+  },
+  "routing": {
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["api"],
+        "outboundTag": "api"
+      }
+    ]
+  },
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": 443,
+      "protocol": "vless",
+      "tag": "vless-in",
+      "settings": {
+        "clients": [],
+        "decryption": "none",
+        "flow": "xtls-rprx-vision"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "www.github.com:443",
+          "xver": 0,
+          "serverNames": ["www.github.com", "github.com"],
+          "privateKey": "ABmvEe3q2NEVc9ajSFRK8h46CMuGT6E7zcQigP3T2Uo",
+          "minClientVer": "1.8.0",
+          "maxClientVer": "1.8.9",
+          "maxTimeDiff": 0,
+          "shortIds": ["0123abcd", "0a98fe76"]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "api"
+    }
+  ]
+}

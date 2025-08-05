@@ -44,6 +44,10 @@ from payment_utils import (
 from scheduler_tasks import check_expired_subscriptions
 from vless_utils import add_vless_user
 
+# Add VLESS imports at the top with other imports
+from vless_database import init_vless_db, add_vless_subscription, get_user_subscription, remove_vless_subscription
+from vps_api_client import add_vless_user_via_api, get_vless_user_status_via_api
+
 # Enable logging
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
@@ -56,6 +60,7 @@ class UserConversationState(Enum):
     CHOOSE_PAYMENT = auto()
     AWAIT_PAYMENT_CONFIRMATION = auto()
     CHOOSE_COUNTRIES = auto()
+    CHOOSE_VLESS_DURATION = auto()
 
 # Conversation states for admin deletion (ensure these are distinct from user states)
 class AdminConversationState(Enum):
@@ -213,7 +218,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # Russian menu buttons
     keyboard = [
-        [InlineKeyboardButton("🟢 Подписаться", callback_data="menu_subscribe")],
+        [InlineKeyboardButton("🟢 Подписаться (Outline)", callback_data="menu_subscribe")],
+        [InlineKeyboardButton("🚀 Подписаться (VLESS)", callback_data="menu_vless_subscribe")],
         [InlineKeyboardButton("📋 Мои подписки", callback_data="menu_my_subscriptions")],
         [InlineKeyboardButton("📖 Инструкция", callback_data="menu_instruction")],
         [InlineKeyboardButton("❓ Помощь", callback_data="menu_help")],
@@ -1005,6 +1011,55 @@ async def menu_subscribe_handler(update: Update, context: ContextTypes.DEFAULT_T
     await context.bot.send_message(chat_id=chat_id, text="Пожалуйста, выберите срок подписки:", reply_markup=reply_markup)
     return UserConversationState.CHOOSE_DURATION.value
 
+async def menu_vless_subscribe_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    # Simulate /vless_subscribe command for callback context
+    user = query.from_user
+    chat_id = query.message.chat_id
+    
+    logger.info(f"User {user.id} started VLESS subscription flow from menu button")
+    
+    # Add VLESS duration plans
+    vless_duration_plans = {
+        "vless_1_month": {
+            "name": "VLESS VPN - 1 месяц",
+            "duration_days": 30,
+            "price_usdt": 2.00,
+            "price_rub": 159.00
+        },
+        "vless_3_months": {
+            "name": "VLESS VPN - 3 месяца", 
+            "duration_days": 90,
+            "price_usdt": 6.00,
+            "price_rub": 450.00
+        },
+        "vless_12_months": {
+            "name": "VLESS VPN - 12 месяцев",
+            "duration_days": 365,
+            "price_usdt": 23.00,
+            "price_rub": 1850.00
+        }
+    }
+    
+    # Build VLESS duration selection keyboard
+    keyboard = [
+        [InlineKeyboardButton(f"{plan['name']} - {plan['price_rub']:.0f} ₽", callback_data=f"vless_duration_{plan_id}")]
+        for plan_id, plan in vless_duration_plans.items()
+    ]
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_vless_subscription")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text="🚀 Выберите срок подписки на VLESS VPN:\n\nVLESS использует протокол REALITY для максимальной безопасности и скорости.",
+        reply_markup=reply_markup
+    )
+    
+    # Store VLESS plans in context
+    context.user_data['vless_plans'] = vless_duration_plans
+    return VLESSConversationState.CHOOSE_VLESS_DURATION.value
+
 async def menu_my_subscriptions_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -1093,8 +1148,10 @@ async def post_init(application: Application) -> None:
     """Post-initialization function to set bot commands."""
     user_commands = [
         BotCommand("start", "Главное меню"),
-        BotCommand("subscribe", "Покупка/продление доступа"),
+        BotCommand("subscribe", "Покупка/продление доступа (Outline)"),
+        BotCommand("vless_subscribe", "Покупка/продление доступа (VLESS)"),
         BotCommand("my_subscriptions", "Мои подписки"),
+        BotCommand("vless_status", "Мои VLESS подписки"),
         BotCommand("instruction", "Инструкция по подключению"),
         BotCommand("help", "Помощь"),
     ]
@@ -1171,6 +1228,38 @@ async def main() -> None:
         allow_reentry=True
     )
 
+    # Add VLESS conversation handler
+    vless_conv_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler("vless_subscribe", vless_subscribe_command),
+            CallbackQueryHandler(vless_renew_handler, pattern="^vless_renew$"),
+            CallbackQueryHandler(menu_vless_subscribe_handler, pattern="^menu_vless_subscribe$")
+        ],
+        states={
+            VLESSConversationState.CHOOSE_VLESS_DURATION.value: [
+                CallbackQueryHandler(vless_duration_chosen, pattern=r"^vless_duration_"),
+                CallbackQueryHandler(cancel_vless_subscription, pattern="^cancel_vless_subscription$")
+            ],
+            VLESSConversationState.CHOOSE_VLESS_PAYMENT.value: [
+                CallbackQueryHandler(vless_payment_method_chosen, pattern=r"^vless_pay_"),
+                CallbackQueryHandler(vless_duration_chosen, pattern="^vless_back_to_duration$"),
+                CallbackQueryHandler(cancel_vless_subscription, pattern="^cancel_vless_subscription$")
+            ],
+            VLESSConversationState.AWAIT_VLESS_PAYMENT_CONFIRMATION.value: [
+                CallbackQueryHandler(vless_confirm_payment, pattern="^vless_confirm_payment$"),
+                CallbackQueryHandler(cancel_vless_subscription, pattern="^cancel_vless_subscription$")
+            ]
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel_vless_subscription),
+            CommandHandler("start", start_command),
+            CommandHandler("help", help_command),
+        ],
+        per_user=True,
+        per_chat=True,
+        allow_reentry=True
+    )
+
     admin_del_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("admin_del_sub", admin_delete_subscription_start)],
         states={
@@ -1195,6 +1284,7 @@ async def main() -> None:
     )
 
     application.add_handler(user_conv_handler)
+    application.add_handler(vless_conv_handler)
     application.add_handler(admin_del_conv_handler)
 
     application.add_handler(CommandHandler("start", start_command))
@@ -1202,6 +1292,8 @@ async def main() -> None:
     application.add_handler(CommandHandler("my_subscriptions", my_subscriptions_command))
     application.add_handler(CommandHandler("instruction", instruction_command))
     application.add_handler(CommandHandler("support", support_command))
+    application.add_handler(CommandHandler("vless_subscribe", vless_subscribe_command))
+    application.add_handler(CommandHandler("vless_status", vless_status_command))
     
     # Add global callback query handler for subscription flow buttons that might be from old messages
     application.add_handler(CallbackQueryHandler(handle_global_subscription_callbacks, pattern=r"^(duration_|pay_|confirm_payment|back_to_duration|cancel_subscription_flow|countries_)"))
@@ -1215,6 +1307,11 @@ async def main() -> None:
     application.add_handler(CallbackQueryHandler(menu_instruction_handler, pattern="^menu_instruction$"))
     application.add_handler(CallbackQueryHandler(instruction_platform_chosen, pattern="^instruction_platform_.*|^instruction_cancel$"))
     application.add_handler(CallbackQueryHandler(menu_support_handler, pattern="^menu_support$"))
+    
+    # Add VLESS callback handlers
+    application.add_handler(CallbackQueryHandler(vless_my_subscriptions_handler, pattern="^vless_my_subscriptions$"))
+    application.add_handler(CallbackQueryHandler(vless_renew_handler, pattern="^vless_renew$"))
+    application.add_handler(CallbackQueryHandler(menu_vless_subscribe_handler, pattern="^menu_vless_subscribe$"))
     
     # Add debug handler to log all incoming messages
     application.add_handler(MessageHandler(filters.ALL, log_all_messages))
@@ -1257,9 +1354,6 @@ async def main() -> None:
             logger.error(f"Error during shutdown: {e}")
 
     application.add_handler(CallbackQueryHandler(menu_support_handler, pattern="^menu_support$"))
-
-    # Add handler for /vless_subscribe command
-    application.add_handler(CommandHandler("vless_subscribe", vless_subscribe))
 
 async def handle_renewal(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle subscription renewal request."""
@@ -1868,25 +1962,496 @@ async def menu_support_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 
 async def vless_subscribe(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handler for /vless_subscribe command (test only, no payment)."""
+    logger.info("vless_subscribe function called")
     user = update.effective_user
     user_id = user.id
-    # 1. Ensure VLESS DB table exists
-    init_vless_db()
-    # 2. Add VLESS user (dummy for now)
-    server_config = VLESS_SERVERS["test"]
-    vless_uuid, vless_uri = add_vless_user(server_config, user_id=str(user_id))
-    # 3. Store subscription (1 week expiry for test)
-    from datetime import datetime, timedelta
-    end_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
-    add_vless_subscription(user_id, vless_uuid, vless_uri, end_date)
-    # 4. Send VLESS URI to user
-    msg = (
-        f"🚀 <b>Your VLESS VPN (Test) is ready!</b>\n\n"
-        f"<b>VLESS URI:</b> <code>{vless_uri}</code>\n\n"
-        f"Valid until: <b>{end_date}</b>\n\n"
-        f"Use a V2Ray/Xray client to connect. This is a test server."
+    logger.info(f"Processing VLESS subscription for user {user_id}")
+    
+    try:
+        # 1. Ensure VLESS DB table exists
+        logger.info("Initializing VLESS database...")
+        init_vless_db()
+        logger.info("VLESS database initialized")
+        
+        # 2. Add VLESS user (dummy for now)
+        logger.info("Getting server config...")
+        server_config = VLESS_SERVERS["server1"]
+        logger.info(f"Server config: {server_config}")
+        
+        logger.info("Adding VLESS user...")
+        vless_uuid, vless_uri = add_vless_user(server_config, user_id=str(user_id))
+        logger.info(f"VLESS user added - UUID: {vless_uuid}, URI: {vless_uri}")
+        
+        if not vless_uuid or not vless_uri:
+            logger.error("Failed to create VLESS user")
+            await update.message.reply_text("❌ Sorry, there was an error creating your VLESS key. Please contact support.")
+            return
+        
+        # 3. Store subscription (1 week expiry for test)
+        from datetime import datetime, timedelta
+        end_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+        logger.info(f"Storing subscription with end date: {end_date}")
+        add_vless_subscription(user_id, vless_uuid, vless_uri, end_date)
+        logger.info("Subscription stored in database")
+        
+        # 4. Send VLESS URI to user
+        msg = (
+            f"🚀 <b>Your VLESS VPN (Test) is ready!</b>\n\n"
+            f"<b>VLESS URI:</b> <code>{vless_uri}</code>\n\n"
+            f"Valid until: <b>{end_date}</b>\n\n"
+            f"Use a V2Ray/Xray client to connect. This is a test server."
+        )
+        logger.info("Sending response to user...")
+        await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+        logger.info("Response sent successfully")
+        
+    except Exception as e:
+        logger.error(f"Error in vless_subscribe: {e}")
+        await update.message.reply_text(f"❌ Error: {str(e)}")
+
+# Add VLESS commands after the existing command handlers
+@rate_limit_command("vless_subscribe")
+async def vless_subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle VLESS subscription with payment integration."""
+    user = update.effective_user
+    logger.info(f"User {user.id} initiated /vless_subscribe.")
+    
+    # Clear any existing conversation state
+    context.user_data.clear()
+    
+    # Add VLESS duration plans (same as Outline but for VLESS)
+    vless_duration_plans = {
+        "vless_1_month": {
+            "name": "VLESS VPN - 1 месяц",
+            "duration_days": 30,
+            "price_usdt": 2.00,
+            "price_rub": 159.00
+        },
+        "vless_3_months": {
+            "name": "VLESS VPN - 3 месяца", 
+            "duration_days": 90,
+            "price_usdt": 6.00,
+            "price_rub": 450.00
+        },
+        "vless_12_months": {
+            "name": "VLESS VPN - 12 месяцев",
+            "duration_days": 365,
+            "price_usdt": 23.00,
+            "price_rub": 1850.00
+        }
+    }
+    
+    # Build VLESS duration selection keyboard
+    keyboard = [
+        [InlineKeyboardButton(f"{plan['name']} - {plan['price_rub']:.0f} ₽", callback_data=f"vless_duration_{plan_id}")]
+        for plan_id, plan in vless_duration_plans.items()
+    ]
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_vless_subscription")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "🚀 Выберите срок подписки на VLESS VPN:\n\n"
+        "VLESS использует протокол REALITY для максимальной безопасности и скорости.",
+        reply_markup=reply_markup
     )
-    await update.message.reply_text(msg, parse_mode=ParseMode.HTML)
+    
+    # Store VLESS plans in context
+    context.user_data['vless_plans'] = vless_duration_plans
+    return UserConversationState.CHOOSE_VLESS_DURATION.value
+
+@rate_limit_command("vless_status") 
+async def vless_status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show VLESS subscription status."""
+    user_id = update.effective_user.id
+    
+    try:
+        # Get user's VLESS subscription from VPS API
+        result = await get_vless_user_status_via_api(user_id)
+        
+        if result.get('success') and result.get('subscription'):
+            subscription = result['subscription']
+            
+            # Format expiry date
+            if isinstance(subscription['expiry_date'], str):
+                expiry_date = datetime.fromisoformat(subscription['expiry_date'].replace('Z', '+00:00'))
+            else:
+                expiry_date = subscription['expiry_date']
+            
+            expiry_str = expiry_date.strftime('%Y-%m-%d %H:%M UTC')
+            
+            # Send VLESS URI and status
+            message = (
+                f"🚀 **Ваша подписка на VLESS VPN:**\n\n"
+                f"**Статус:** {subscription['status']}\n"
+                f"**Истекает:** {expiry_str}\n\n"
+                f"**VLESS URI:**\n"
+                f"`{subscription['vless_uri']}`\n\n"
+                f"ℹ️ Скопируйте URI и используйте его в V2Ray/Xray клиенте."
+            )
+            
+            await update.message.reply_text(
+                message,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔄 Продлить подписку", callback_data="vless_renew"),
+                    InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")
+                ]])
+            )
+        else:
+            await update.message.reply_text(
+                "У вас нет активной подписки на VLESS VPN.\n"
+                "Используйте /vless_subscribe, чтобы приобрести подписку!",
+                reply_markup=MAIN_MENU_BUTTON
+            )
+            
+    except Exception as e:
+        logger.error(f"Error getting VLESS status: {e}")
+        await update.message.reply_text(
+            "❌ Ошибка при получении статуса VLESS подписки. Попробуйте позже.",
+            reply_markup=MAIN_MENU_BUTTON
+        )
+
+# Add VLESS conversation states
+class VLESSConversationState(Enum):
+    CHOOSE_VLESS_DURATION = auto()
+    CHOOSE_VLESS_PAYMENT = auto()
+    AWAIT_VLESS_PAYMENT_CONFIRMATION = auto()
+
+# VLESS conversation handlers
+async def vless_duration_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle VLESS duration selection."""
+    query = update.callback_query
+    await query.answer()
+    
+    duration_id = query.data[len("vless_duration_"):]
+    context.user_data['selected_vless_duration'] = duration_id
+    
+    vless_plans = context.user_data.get('vless_plans', {})
+    plan_details = vless_plans.get(duration_id)
+    
+    if not plan_details:
+        await query.edit_message_text("Ошибка: План не найден. Попробуйте снова.")
+        return ConversationHandler.END
+    
+    text = (
+        f"Вы выбрали: {plan_details['name']}\n"
+        f"Цена: {plan_details['price_rub']:.0f} ₽\n\n"
+        "Пожалуйста, выберите способ оплаты:"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("💳 Картой или СБП", callback_data="vless_pay_card")],
+        [InlineKeyboardButton("🪙 Криптовалютой", callback_data="vless_pay_crypto")],
+        [InlineKeyboardButton("⬅️ Назад", callback_data="vless_back_to_duration")],
+        [InlineKeyboardButton("❌ Отмена", callback_data="cancel_vless_subscription")]
+    ]
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text(text=text, reply_markup=reply_markup)
+    return VLESSConversationState.CHOOSE_VLESS_PAYMENT.value
+
+async def vless_payment_method_chosen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle VLESS payment method selection."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "vless_back_to_duration":
+        # Return to duration selection
+        vless_plans = context.user_data.get('vless_plans', {})
+        keyboard = [
+            [InlineKeyboardButton(f"{plan['name']} - {plan['price_rub']:.0f} ₽", callback_data=f"vless_duration_{plan_id}")]
+            for plan_id, plan in vless_plans.items()
+        ]
+        keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_vless_subscription")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "🚀 Выберите срок подписки на VLESS VPN:",
+            reply_markup=reply_markup
+        )
+        return VLESSConversationState.CHOOSE_VLESS_DURATION.value
+    
+    duration_id = context.user_data.get('selected_vless_duration')
+    vless_plans = context.user_data.get('vless_plans', {})
+    plan = vless_plans.get(duration_id)
+    
+    if not plan:
+        await query.edit_message_text("Ошибка: План не найден. Попробуйте снова.")
+        return ConversationHandler.END
+    
+    if query.data == "vless_pay_crypto":
+        try:
+            # Generate crypto payment for VLESS
+            instructions, invoice_id = await get_crypto_payment_details(
+                plan['price_usdt'],
+                f"VLESS VPN - {plan['name']}"
+            )
+            
+            context.user_data['vless_payment_id'] = invoice_id
+            context.user_data['vless_payment_type'] = 'crypto'
+            
+            keyboard = [
+                [InlineKeyboardButton("✅ Я оплатил", callback_data="vless_confirm_payment")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="cancel_vless_subscription")]
+            ]
+            
+            await query.edit_message_text(
+                instructions,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+        except Exception as e:
+            logger.error(f"Error creating VLESS crypto payment: {e}")
+            await query.edit_message_text(
+                "Извините, произошла ошибка при создании платежа. Попробуйте позже.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⬅️ Назад", callback_data="vless_back_to_duration")
+                ]])
+            )
+            return VLESSConversationState.CHOOSE_VLESS_DURATION.value
+    
+    elif query.data == "vless_pay_card":
+        try:
+            # Generate Youkassa payment for VLESS
+            instructions, payment_id = await get_yookassa_payment_details(
+                plan['price_rub'],
+                f"VLESS VPN - {plan['name']}"
+            )
+            
+            # Extract payment URL
+            import re
+            url_match = re.search(r'(https?://\S+)', instructions)
+            confirmation_url = url_match.group(1) if url_match else None
+            
+            if confirmation_url:
+                instructions = instructions.replace(f"Ссылка для оплаты: {confirmation_url}", "")
+            
+            context.user_data['vless_payment_id'] = payment_id
+            context.user_data['vless_payment_type'] = 'card'
+            
+            keyboard = []
+            if confirmation_url:
+                keyboard.append([InlineKeyboardButton("💳 Оплатить через Youkassa", url=confirmation_url)])
+            keyboard.append([InlineKeyboardButton("✅ Я оплатил", callback_data="vless_confirm_payment")])
+            keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="cancel_vless_subscription")])
+            
+            await query.edit_message_text(
+                instructions.strip(),
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+        except Exception as e:
+            logger.error(f"Error creating VLESS card payment: {e}")
+            await query.edit_message_text(
+                "Извините, произошла ошибка при создании платежа. Попробуйте позже.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("⬅️ Назад", callback_data="vless_back_to_duration")
+                ]])
+            )
+            return VLESSConversationState.CHOOSE_VLESS_DURATION.value
+    
+    return VLESSConversationState.AWAIT_VLESS_PAYMENT_CONFIRMATION.value
+
+async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle VLESS payment confirmation and create subscription."""
+    query = update.callback_query
+    await query.answer()
+    
+    payment_id = context.user_data.get('vless_payment_id')
+    payment_type = context.user_data.get('vless_payment_type')
+    duration_id = context.user_data.get('selected_vless_duration')
+    vless_plans = context.user_data.get('vless_plans', {})
+    plan = vless_plans.get(duration_id)
+    
+    if not payment_id or not payment_type or not plan:
+        await query.edit_message_text(
+            "❌ Ошибка: Платежная информация не найдена. Попробуйте снова.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
+            ]])
+        )
+        return ConversationHandler.END
+    
+    try:
+        # Check payment status
+        if payment_type == 'crypto':
+            status = await get_payment_status(payment_id)
+        else:  # card payment
+            status = await get_yookassa_payment_status(payment_id)
+        
+        if status == "paid" or status == "succeeded":
+            # Verify the payment
+            if payment_type == 'crypto':
+                is_verified = await verify_crypto_payment(payment_id)
+            else:  # card payment
+                is_verified = await verify_yookassa_payment(payment_id)
+            
+            if is_verified:
+                # Create VLESS subscription on VPS
+                user_id = update.effective_user.id
+                
+                try:
+                    # Add user to VPS VLESS configuration via API
+                    result = await add_vless_user_via_api(user_id, plan['duration_days'])
+                    
+                    if result.get('success'):
+                        # Get VLESS URI and expiry from API response
+                        vless_uri = result['vless_uri']
+                        expiry_date_str = result['expiry_date']
+                        expiry_date = datetime.fromisoformat(expiry_date_str.replace('Z', '+00:00'))
+                        
+                        success_message = (
+                            f"🎉 **Ваша подписка на VLESS VPN активирована!**\n\n"
+                            f"**Срок:** {plan['name']}\n"
+                            f"**Истекает:** {expiry_date.strftime('%Y-%m-%d %H:%M UTC')}\n\n"
+                            f"**VLESS URI:**\n"
+                            f"`{vless_uri}`\n\n"
+                            f"ℹ️ Используйте этот URI в V2Ray/Xray клиенте для подключения."
+                        )
+                        
+                        await query.edit_message_text(
+                            success_message,
+                            parse_mode=ParseMode.MARKDOWN,
+                            reply_markup=InlineKeyboardMarkup([[
+                                InlineKeyboardButton("📋 Мои подписки", callback_data="vless_my_subscriptions"),
+                                InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")
+                            ]])
+                        )
+                        
+                        # Clear user data
+                        context.user_data.clear()
+                        return ConversationHandler.END
+                    else:
+                        raise Exception("Failed to create VLESS user on VPS")
+                        
+                except Exception as e:
+                    logger.error(f"Error creating VLESS subscription: {e}")
+                    await query.edit_message_text(
+                        "❌ Ошибка при создании VLESS подписки. Пожалуйста, обратитесь в поддержку.",
+                        reply_markup=InlineKeyboardMarkup([[
+                            InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
+                        ]])
+                    )
+                    return ConversationHandler.END
+            else:
+                await query.edit_message_text(
+                    "❌ Проверка платежа не удалась. Попробуйте еще раз.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("🔄 Проверить еще раз", callback_data="vless_confirm_payment"),
+                        InlineKeyboardButton("❌ Отмена", callback_data="cancel_vless_subscription")
+                    ]])
+                )
+                return VLESSConversationState.AWAIT_VLESS_PAYMENT_CONFIRMATION.value
+        else:
+            await query.edit_message_text(
+                "❌ Платеж не найден. Убедитесь, что вы отправили платеж, и попробуйте снова.",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔄 Проверить еще раз", callback_data="vless_confirm_payment"),
+                    InlineKeyboardButton("❌ Отмена", callback_data="cancel_vless_subscription")
+                ]])
+            )
+            return VLESSConversationState.AWAIT_VLESS_PAYMENT_CONFIRMATION.value
+            
+    except Exception as e:
+        logger.error(f"Error processing VLESS payment: {e}")
+        await query.edit_message_text(
+            "❌ Произошла ошибка при обработке платежа. Попробуйте еще раз.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔄 Попробовать еще раз", callback_data="vless_confirm_payment"),
+                InlineKeyboardButton("❌ Отмена", callback_data="cancel_vless_subscription")
+            ]])
+        )
+        return VLESSConversationState.AWAIT_VLESS_PAYMENT_CONFIRMATION.value
+
+async def cancel_vless_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancel VLESS subscription flow."""
+    query = update.callback_query
+    if query:
+        await query.answer()
+        await query.edit_message_text(
+            "Процесс подписки на VLESS VPN отменен.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
+            ]])
+        )
+    else:
+        await update.message.reply_text(
+            "Процесс подписки на VLESS VPN отменен.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("⬅️ Назад в меню", callback_data="back_to_menu")
+            ]])
+        )
+    
+    context.user_data.clear()
+    return ConversationHandler.END
+
+# Add VLESS callback handlers
+async def vless_my_subscriptions_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle VLESS my subscriptions button."""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    chat_id = query.message.chat_id
+    
+    try:
+        # Get user's VLESS subscription from VPS API
+        result = await get_vless_user_status_via_api(user_id)
+        
+        if result.get('success') and result.get('subscription'):
+            subscription = result['subscription']
+            
+            # Format expiry date
+            if isinstance(subscription['expiry_date'], str):
+                expiry_date = datetime.fromisoformat(subscription['expiry_date'].replace('Z', '+00:00'))
+            else:
+                expiry_date = subscription['expiry_date']
+            
+            expiry_str = expiry_date.strftime('%Y-%m-%d %H:%M UTC')
+            
+            # Send VLESS URI and status
+            message = (
+                f"🚀 **Ваша подписка на VLESS VPN:**\n\n"
+                f"**Статус:** {subscription['status']}\n"
+                f"**Истекает:** {expiry_str}\n\n"
+                f"**VLESS URI:**\n"
+                f"`{subscription['vless_uri']}`\n\n"
+                f"ℹ️ Скопируйте URI и используйте его в V2Ray/Xray клиенте."
+            )
+            
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔄 Продлить подписку", callback_data="vless_renew"),
+                    InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")
+                ]])
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="У вас нет активной подписки на VLESS VPN.\nИспользуйте /vless_subscribe, чтобы приобрести подписку!",
+                reply_markup=MAIN_MENU_BUTTON
+            )
+            
+    except Exception as e:
+        logger.error(f"Error getting VLESS status: {e}")
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="❌ Ошибка при получении статуса VLESS подписки. Попробуйте позже.",
+            reply_markup=MAIN_MENU_BUTTON
+        )
+
+async def vless_renew_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Handle VLESS subscription renewal."""
+    query = update.callback_query
+    await query.answer()
+    
+    # Start renewal process (same as new subscription)
+    return await vless_subscribe_command(update, context)
 
 if __name__ == "__main__":
     try:
