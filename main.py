@@ -2019,11 +2019,37 @@ async def test_vps_api_command(update: Update, context: ContextTypes.DEFAULT_TYP
     """Test VPS API connection (ADMIN ONLY)."""
     try:
         from vps_api_client import vps_client
+        import os
+        
+        # Show environment variables (masked for security)
+        vps_url = os.getenv('VPS_API_URL', 'NOT_SET')
+        vps_key = os.getenv('VPS_API_KEY', 'NOT_SET')
+        masked_key = vps_key[:8] + "..." + vps_key[-4:] if vps_key != 'NOT_SET' else 'NOT_SET'
+        
+        config_info = f"VPS_API_URL: {vps_url}\nVPS_API_KEY: {masked_key}"
+        
+        # Test health check
         result = await vps_client.health_check()
+        
         await update.message.reply_text(
-            f"✅ VPS API Health Check:\n\n```\n{result}\n```",
+            f"✅ VPS API Health Check:\n\n"
+            f"**Config:**\n```\n{config_info}\n```\n\n"
+            f"**Response:**\n```\n{result}\n```",
             parse_mode=ParseMode.MARKDOWN
         )
+        
+        # Test VLESS user creation
+        try:
+            test_result = await vps_client.add_vless_user(999999, 1)  # Test user
+            await update.message.reply_text(
+                f"✅ VLESS User Creation Test:\n\n```\n{test_result}\n```",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as test_e:
+            await update.message.reply_text(
+                f"❌ VLESS User Creation Test Failed:\n\n```\n{str(test_e)}\n```",
+                parse_mode=ParseMode.MARKDOWN
+            )
     except Exception as e:
         await update.message.reply_text(
             f"❌ VPS API Error:\n\n```\n{str(e)}\n```",
