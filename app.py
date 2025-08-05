@@ -10,6 +10,10 @@ import threading
 import warnings
 from flask import Flask, jsonify
 
+# Import configuration and database functions
+from config import USE_POSTGRESQL
+from database import get_connection
+
 # Suppress warnings that might appear during bot startup
 warnings.filterwarnings("ignore", category=UserWarning, module="telegram")
 warnings.filterwarnings("ignore", category=RuntimeWarning)

@@ -109,8 +109,11 @@ if not CRYPTOBOT_MAINNET_API_TOKEN:
     logger.warning("CRYPTOBOT_MAINNET_API_TOKEN not found in environment variables")
 
 # Debug log the token (first few characters for security)
-masked_token = CRYPTOBOT_TESTNET_API_TOKEN[:8] + "..." + CRYPTOBOT_TESTNET_API_TOKEN[-4:]
-logger.info(f"Loaded CryptoBot testnet token: {masked_token}")
+if CRYPTOBOT_TESTNET_API_TOKEN:
+    masked_token = CRYPTOBOT_TESTNET_API_TOKEN[:8] + "..." + CRYPTOBOT_TESTNET_API_TOKEN[-4:]
+    logger.info(f"Loaded CryptoBot testnet token: {masked_token}")
+else:
+    logger.warning("CRYPTOBOT_TESTNET_API_TOKEN not found in environment variables")
 
 # Debug log the mainnet token if available
 if CRYPTOBOT_MAINNET_API_TOKEN:

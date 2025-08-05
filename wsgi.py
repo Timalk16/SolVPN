@@ -15,7 +15,7 @@ warnings.filterwarnings("ignore", category=RuntimeWarning)
 # Add the current directory to Python path
 sys.path.insert(0, os.path.dirname(__file__))
 
-# Import Flask app
+# Import Flask app from app.py
 from app import app
 
 # Global bot status
