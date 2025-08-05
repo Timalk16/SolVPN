@@ -2206,11 +2206,23 @@ async def vless_payment_method_chosen(update: Update, context: ContextTypes.DEFA
     if query.data == "vless_pay_crypto":
         try:
             # Generate crypto payment for VLESS (TESTNET for testing)
-            instructions, invoice_id = await get_crypto_payment_details(
-                plan['price_usdt'],
-                f"VLESS VPN TESTNET - {plan['name']}",
-                use_testnet=True  # Force testnet for VLESS testing
-            )
+            # Temporarily override USE_TESTNET for VLESS payments
+            import payment_utils
+            original_use_testnet = payment_utils.USE_TESTNET
+            payment_utils.USE_TESTNET = True
+            payment_utils.CRYPTOBOT_API_TOKEN = payment_utils.CRYPTOBOT_TESTNET_API_TOKEN
+            payment_utils.API_BASE_URL = "https://testnet-pay.crypt.bot/api"
+            
+            try:
+                instructions, invoice_id = await get_crypto_payment_details(
+                    plan['price_usdt'],
+                    f"VLESS VPN TESTNET - {plan['name']}"
+                )
+            finally:
+                # Restore original settings
+                payment_utils.USE_TESTNET = original_use_testnet
+                payment_utils.CRYPTOBOT_API_TOKEN = payment_utils.CRYPTOBOT_MAINNET_API_TOKEN
+                payment_utils.API_BASE_URL = "https://pay.crypt.bot/api"
             
             context.user_data['vless_payment_id'] = invoice_id
             context.user_data['vless_payment_type'] = 'crypto'
@@ -2302,14 +2314,40 @@ async def vless_confirm_payment(update: Update, context: ContextTypes.DEFAULT_TY
     try:
         # Check payment status
         if payment_type == 'crypto':
-            status = await get_payment_status(payment_id, use_testnet=True)  # Use testnet for VLESS
+            # Temporarily override USE_TESTNET for VLESS crypto payments
+            import payment_utils
+            original_use_testnet = payment_utils.USE_TESTNET
+            payment_utils.USE_TESTNET = True
+            payment_utils.CRYPTOBOT_API_TOKEN = payment_utils.CRYPTOBOT_TESTNET_API_TOKEN
+            payment_utils.API_BASE_URL = "https://testnet-pay.crypt.bot/api"
+            
+            try:
+                status = await get_payment_status(payment_id)
+            finally:
+                # Restore original settings
+                payment_utils.USE_TESTNET = original_use_testnet
+                payment_utils.CRYPTOBOT_API_TOKEN = payment_utils.CRYPTOBOT_MAINNET_API_TOKEN
+                payment_utils.API_BASE_URL = "https://pay.crypt.bot/api"
         else:  # card payment
             status = await get_yookassa_payment_status(payment_id)
         
         if status == "paid" or status == "succeeded":
             # Verify the payment
             if payment_type == 'crypto':
-                is_verified = await verify_crypto_payment(payment_id, use_testnet=True)  # Use testnet for VLESS
+                # Temporarily override USE_TESTNET for VLESS crypto payments
+                import payment_utils
+                original_use_testnet = payment_utils.USE_TESTNET
+                payment_utils.USE_TESTNET = True
+                payment_utils.CRYPTOBOT_API_TOKEN = payment_utils.CRYPTOBOT_TESTNET_API_TOKEN
+                payment_utils.API_BASE_URL = "https://testnet-pay.crypt.bot/api"
+                
+                try:
+                    is_verified = await verify_crypto_payment(payment_id)
+                finally:
+                    # Restore original settings
+                    payment_utils.USE_TESTNET = original_use_testnet
+                    payment_utils.CRYPTOBOT_API_TOKEN = payment_utils.CRYPTOBOT_MAINNET_API_TOKEN
+                    payment_utils.API_BASE_URL = "https://pay.crypt.bot/api"
             else:  # card payment
                 is_verified = await verify_yookassa_payment(payment_id)
             
