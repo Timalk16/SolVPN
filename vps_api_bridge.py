@@ -64,8 +64,25 @@ def add_vless_user_api():
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
         
-        # Add user to VPS VLESS configuration
+        # Check if user already exists and remove them first
+        logger.info(f"Checking if user {user_email} already exists...")
+        
+        # Try to add user to VPS VLESS configuration
         success = add_user_via_config(user_email)
+        
+        if not success:
+            # User might already exist, try to remove them first
+            logger.info(f"User {user_email} might already exist, attempting to remove first...")
+            from vless_api_utils import remove_user_via_config
+            remove_success = remove_user_via_config(user_email)
+            
+            if remove_success:
+                logger.info(f"Successfully removed existing user {user_email}, creating new one...")
+                # Try to add user again
+                success = add_user_via_config(user_email)
+            else:
+                logger.error(f"Failed to remove existing user {user_email}")
+                return jsonify({'error': 'Failed to remove existing VLESS user'}), 500
         
         if success:
             # Generate VLESS URI
@@ -89,7 +106,7 @@ def add_vless_user_api():
                 'expiry_date': expiry_date.isoformat()
             })
         else:
-            return jsonify({'error': 'Failed to create VLESS user'}), 500
+            return jsonify({'error': 'Failed to create VLESS user after removal attempt'}), 500
             
     except Exception as e:
         logger.error(f"Error adding VLESS user: {e}")

@@ -218,7 +218,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     # Russian menu buttons
     keyboard = [
-        [InlineKeyboardButton("🟢 Подписаться (Outline)", callback_data="menu_subscribe")],
         [InlineKeyboardButton("🚀 Подписаться (VLESS)", callback_data="menu_vless_subscribe")],
         [InlineKeyboardButton("📋 Мои подписки", callback_data="menu_my_subscriptions")],
         [InlineKeyboardButton("📖 Инструкция", callback_data="menu_instruction")],
@@ -250,10 +249,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     
     help_text = (
         "ℹ️ Как пользоваться этим ботом:\n\n"
-        "1\\. Используйте /subscribe, чтобы увидеть доступные тарифы VPN\\.\n"
+        "1\\. Используйте кнопку 'Подписаться \\(VLESS\\)', чтобы увидеть доступные тарифы VLESS VPN\\.\n"
         "2\\. Выберите тариф и способ оплаты\\.\n"
         "3\\. Следуйте инструкциям для завершения оплаты\\.\n"
-        "4\\. После подтверждения оплаты вы получите ключ доступа к VPN\\.\n\n"
+        "4\\. После подтверждения оплаты вы получите VLESS URI для подключения\\.\n\n"
         "Используйте /my\\_subscriptions для проверки вашего текущего доступа\\.\n"
         "Если у вас возникли проблемы, обратитесь в поддержку: @SolSuprt или воспользуйтесь командой /support\\."
         f"{testnet_notice}"
@@ -285,46 +284,65 @@ async def subscribe_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return UserConversationState.CHOOSE_DURATION.value
 
 def build_my_subscriptions_message_and_keyboard(active_subs):
-    message = "Ваши активные подписки на VPN:\n\n"
+    message = "Ваши активные подписки на VLESS VPN:\n\n"
     keyboard = []
-    for sub_id, duration_plan_id, country_package_id, end_date_str, status, countries, access_urls in active_subs:
-        duration_plan_name = DURATION_PLANS.get(duration_plan_id, {}).get("name", "Неизвестный срок")
-        country_package_name = COUNTRY_PACKAGES.get(country_package_id, {}).get("name", "Неизвестный пакет")
-        if isinstance(end_date_str, str):
-            end_date = datetime.fromisoformat(end_date_str).strftime('%Y-%m-%d %H:%M UTC')
-        else:
-            end_date = end_date_str.strftime('%Y-%m-%d %H:%M UTC')
-        country_list = countries.split(',') if countries else []
-        access_url_list = access_urls.split(',') if access_urls else []
-        message += f"**Срок:** {duration_plan_name}\n"
-        message += f"**Пакет:** {country_package_name}\n"
-        message += f"**Истекает:** {end_date}\n\n"
-        for i, country in enumerate(country_list):
-            if i < len(access_url_list):
-                country_name = OUTLINE_SERVERS.get(country, {}).get('name', country.title())
-                country_flag = OUTLINE_SERVERS.get(country, {}).get('flag', '🌍')
-                message += (
-                    f"{country_flag} **{country_name}:**\n"
-                    f"🔑 Скопируйте этот ключ и импортируйте в Outline:\n"
-                    f"`{access_url_list[i]}`\n\n"
-                )
-        keyboard.append([InlineKeyboardButton(f"🔄 Продлить {duration_plan_name}", callback_data=f"renew_{sub_id}")])
-    message += "\nℹ️ Чтобы скопировать ключ, кликните на него. Затем вставьте ключ в приложение Outline."
+    
+    # Get VLESS subscriptions from VLESS database
+    user_id = active_subs[0][0] if active_subs else None  # Get user_id from first subscription
+    if user_id:
+        try:
+            init_vless_db()
+            vless_subscription = get_user_subscription(user_id)
+            if vless_subscription:
+                user_id, uuid, vless_uri, expiry_date_str = vless_subscription
+                if isinstance(expiry_date_str, str):
+                    expiry_date = datetime.strptime(expiry_date_str, '%Y-%m-%d %H:%M:%S').strftime('%Y-%m-%d %H:%M UTC')
+                else:
+                    expiry_date = expiry_date_str.strftime('%Y-%m-%d %H:%M UTC')
+                
+                message += f"**Тип:** VLESS VPN\n"
+                message += f"**Истекает:** {expiry_date}\n\n"
+                message += f"🔑 **VLESS URI для подключения:**\n"
+                message += f"`{vless_uri}`\n\n"
+                message += "ℹ️ Скопируйте этот URI и используйте его в приложениях V2rayNG, Clash или других VLESS-совместимых клиентах."
+                
+                keyboard.append([InlineKeyboardButton("🔄 Продлить VLESS подписку", callback_data="renew_vless")])
+                return message, keyboard
+        except Exception as e:
+            logger.error(f"Error getting VLESS subscription: {e}")
+    
+    # Fallback if no VLESS subscription found
+    message += "У вас нет активных VLESS подписок.\n\n"
+    message += "🚀 Используйте кнопку 'Подписаться (VLESS)' для приобретения подписки."
+    
     return message, keyboard
 
 @rate_limit_command("my_subscriptions")
 async def my_subscriptions_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user_id = update.effective_user.id
-    active_subs = get_active_subscriptions(user_id)
-    if not active_subs:
-        await update.message.reply_text("У вас нет активных подписок. Используйте /subscribe, чтобы приобрести одну!", reply_markup=MAIN_MENU_BUTTON)
-        return
-    message, keyboard = build_my_subscriptions_message_and_keyboard(active_subs)
-    keyboard.append([InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")])
+    
+    # Check for VLESS subscriptions first
+    try:
+        init_vless_db()
+        vless_subscription = get_user_subscription(user_id)
+        if vless_subscription:
+            # Create a dummy active_subs list with user_id for the function to work
+            dummy_active_subs = [(user_id,)]
+            message, keyboard = build_my_subscriptions_message_and_keyboard(dummy_active_subs)
+            keyboard.append([InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")])
+            await update.message.reply_text(
+                message, 
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+    except Exception as e:
+        logger.error(f"Error checking VLESS subscription: {e}")
+    
+    # If no VLESS subscription found
     await update.message.reply_text(
-        message, 
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        "У вас нет активных VLESS подписок. Используйте кнопку 'Подписаться (VLESS)' для приобретения подписки!", 
+        reply_markup=MAIN_MENU_BUTTON
     )
 
 # --- User Subscription Conversation Handlers ---
@@ -998,18 +1016,6 @@ async def back_to_menu_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 # --- Main Menu Button Handlers ---
-async def menu_subscribe_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    # Simulate /subscribe command for callback context
-    user = query.from_user
-    chat_id = query.message.chat_id
-    
-    logger.info(f"User {user.id} started subscription flow from menu button")
-    
-    reply_markup = build_duration_selection_keyboard()
-    await context.bot.send_message(chat_id=chat_id, text="Пожалуйста, выберите срок подписки:", reply_markup=reply_markup)
-    return UserConversationState.CHOOSE_DURATION.value
 
 async def menu_vless_subscribe_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -1065,17 +1071,31 @@ async def menu_my_subscriptions_handler(update: Update, context: ContextTypes.DE
     await query.answer()
     user_id = query.from_user.id
     chat_id = query.message.chat_id
-    active_subs = get_active_subscriptions(user_id)
-    if not active_subs:
-        await context.bot.send_message(chat_id=chat_id, text="У вас нет активных подписок. Используйте /subscribe, чтобы приобрести одну!", reply_markup=MAIN_MENU_BUTTON)
-        return
-    message, keyboard = build_my_subscriptions_message_and_keyboard(active_subs)
-    keyboard.append([InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")])
+    
+    # Check for VLESS subscriptions first
+    try:
+        init_vless_db()
+        vless_subscription = get_user_subscription(user_id)
+        if vless_subscription:
+            # Create a dummy active_subs list with user_id for the function to work
+            dummy_active_subs = [(user_id,)]
+            message, keyboard = build_my_subscriptions_message_and_keyboard(dummy_active_subs)
+            keyboard.append([InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")])
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+    except Exception as e:
+        logger.error(f"Error checking VLESS subscription: {e}")
+    
+    # If no VLESS subscription found
     await context.bot.send_message(
-        chat_id=chat_id,
-        text=message,
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        chat_id=chat_id, 
+        text="У вас нет активных VLESS подписок. Используйте кнопку 'Подписаться (VLESS)' для приобретения подписки!", 
+        reply_markup=MAIN_MENU_BUTTON
     )
 
 async def menu_help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1087,10 +1107,10 @@ async def menu_help_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     testnet_notice = f"\n\n⚠️ *{testnet_status} Mode*" if testnet_status == "Testnet" else ""
     help_text = (
         "ℹ️ Как пользоваться этим ботом:\n\n"
-        "1\\. Используйте /subscribe, чтобы увидеть доступные тарифы VPN\\.\n"
+        "1\\. Используйте кнопку 'Подписаться \\(VLESS\\)', чтобы увидеть доступные тарифы VLESS VPN\\.\n"
         "2\\. Выберите тариф и способ оплаты\\.\n"
         "3\\. Следуйте инструкциям для завершения оплаты\\.\n"
-        "4\\. После подтверждения оплаты вы получите ключ доступа к VPN\\.\n\n"
+        "4\\. После подтверждения оплаты вы получите VLESS URI для подключения\\.\n\n"
         "Используйте /my\\_subscriptions для проверки вашего текущего доступа\\.\n"
         "Если у вас возникли проблемы, обратитесь в поддержку: @SolSuprt или воспользуйтесь командой /support\\."
         f"{testnet_notice}"
@@ -1148,8 +1168,7 @@ async def post_init(application: Application) -> None:
     """Post-initialization function to set bot commands."""
     user_commands = [
         BotCommand("start", "Главное меню"),
-        BotCommand("subscribe", "Покупка/продление доступа (Outline)"),
-        BotCommand("my_subscriptions", "Мои подписки"),
+        BotCommand("my_subscriptions", "Мои VLESS подписки"),
         BotCommand("instruction", "Инструкция по подключению"),
         BotCommand("help", "Помощь"),
     ]
@@ -1198,7 +1217,6 @@ async def main() -> None:
         entry_points=[
             CommandHandler("subscribe", subscribe_command),
             CallbackQueryHandler(handle_renewal, pattern=r"^renew_\d+$"),
-            CallbackQueryHandler(menu_subscribe_handler, pattern="^menu_subscribe$")
         ],
         states={
             UserConversationState.CHOOSE_DURATION.value: [
